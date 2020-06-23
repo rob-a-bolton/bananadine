@@ -14,8 +14,9 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 (ns bananadine.matrix.connection
-  (:require [mount.core :refer [defstate]]
-            [bananadine.db :as db])
+  (:require [bananadine.matrix.api :as api]
+            [bananadine.db :as db]
+            [mount.core :refer [defstate]])
   (:gen-class))
 
 (declare create-conn
@@ -25,14 +26,17 @@
   :start (create-conn)
   :stop (destroy-conn conn))
 
+(def conn-state (atom {}))
+
 (defn create-conn
   []
-  (atom {:host (db/get-simple-p :server "host")}))
+  (api/login!)
+  (swap! conn-state assoc :connected true)
+  conn-state)
 
 (defn destroy-conn
   [conn]
-  (reset! @conn {}))
+  (swap! conn-state dissoc :connected)
+  conn-state)
 
-(defn make-url
-  [stub]
-  (format "https://%s/%s" (:host @conn) stub))
+

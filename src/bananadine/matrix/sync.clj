@@ -15,7 +15,9 @@
 
 (ns bananadine.matrix.sync
   (:require [bananadine.db :as db]
-            [bananadine.matrix.connection :refer [conn make-url]]
+            [bananadine.util :as util]
+            [bananadine.matrix.api :as api]
+            [bananadine.matrix.connection :refer [conn]]
             [cheshire.core :refer :all]
             [clj-http.client :as client]
             [clojure.core.async :refer [pub chan >! >!! <! <!! go]]
@@ -25,64 +27,29 @@
   (:gen-class))
 
 
-(declare start-syncer stop-syncer)
+(declare start-syncer! stop-syncer!)
 
 (defstate syncer
-  :start (start-syncer)
-  :stop (stop-syncer))
+  :start (start-syncer!)
+  :stop (stop-syncer!))
 
 (def sync-state (atom {}))
-(def sync-chan (chan))
+(def sync-chan (util/mk-chan))
 (def sync-pub (pub sync-chan :msg-type))
 
-(defn set-next-batch!
-  [next-batch]
-  (db/set-simple-p! :server "next-batch" next-batch))
-
-(defn get-next-batch
-  []
-  (db/get-simple-p :server "next-batch"))
-
-(defn get-sync-args
-  []
-  (let [next-batch (get-next-batch)]
-    (merge {}
-           (if next-batch
-             {:since next-batch
-              :timeout 55000}))))
-
-(defn clear-next-batch
-  []
-  (o/traverse @db/g
-              (o/V)
-              (o/has-label :server)
-              (o/properties "next-batch")
-              (o/drop)))
-
-(defn do-sync!
-  []
-  (client/get 
-   (make-url "_matrix/client/r0/sync")
-   {:async? true
-    :as :json
-    :query-params (get-sync-args)
-    :oauth-token (:token @conn)}
-   ; Success
-   (fn [response]
-     (when-let [next-batch (get-in response [:body :next_batch])]
-       (set-next-batch! next-batch))
-     (µ/log (:body response))
-     (>!! sync-chan {:msg-type :sync
-                     :data (:body response)})
-     (when (:running @sync-state)
-       (do-sync!)))
-   ; Failure
-   (fn [exception]
-     (µ/log exception))))
-
-(defn start-syncer
+(defn start-syncer!
   []
   (swap! sync-state assoc :running true)
-  (do-sync!)
+  (go (while (:running @sync-state)
+        (try
+          (>! sync-chan {:msg-type :sync
+                         :data (api/sync!)})
+          (catch Exception e
+            (µ/log (.getMessage e))))))
   sync-state)
 
+
+(defn stop-syncer!
+  []
+  (swap! sync-state dissoc :running)
+  sync-state)

@@ -17,16 +17,18 @@
 (ns bananadine.core
   (:require [mount.core :refer [defstate start]]
             [com.brunobonacci.mulog :as μ]
-            [bananadine.matrix.sync]
-            [bananadine.matrix.events]
-            [bananadine.matrix.invites]
-            [bananadine.matrix.auth :as auth])
+            [bananadine.logger]
+            [bananadine.matrix.connection :refer [conn]]
+            [bananadine.matrix.sync :refer [syncer]]
+            [bananadine.matrix.events :refer [event-handler]]
+            [bananadine.matrix.invites :refer [invite-handler]])
   (:gen-class))
 
 ;(μ/start-publisher! {:type :console})
-(μ/start-publisher! {:type :simple-file
-                     :pretty? true
-                     :filename "/tmp/bananadine.log"})
+(μ/start-publisher!
+ {:type :custom
+  :fqn-function "bananadine.logger/pretty-publisher"
+  :filename "/tmp/bananadine.edn"})
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -35,21 +37,33 @@
   (println "Hello, World!"))
 
 '(require '[bananadine.db :as db]
-         '[bananadine.matrix.auth :as auth]
+         '[bananadine.util :as util]
+         '[bananadine.matrix.api :as api]
          '[bananadine.matrix.sync :as msync]
          '[bananadine.matrix.events :as mevents]
          '[bananadine.matrix.invites :as minvites]
-         '[bananadine.matrix.connection :refer [conn make-url]]
+         '[bananadine.matrix.mentions :as mentions]
+         '[bananadine.matrix.connection :refer [conn]]
+         '[bananadine.matrix.urls :as murls]
+         '[bananadine.matrix.sites.tanukitunes :as tanuki]
          '[cheshire.core :refer :all]
-         '[clojure.core.async :refer [pub chan >! >!! <! <!! go]]
+         '[hiccup.core :as hc]
+         '[clojure.pprint :refer [pprint]]
+         '[pl.danieljanus.tagsoup :as tsoup]
+         '[net.cgrand.enlive-html :as en]
+         '[clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
          '[clj-http.client :as client]
          '[clojurewerkz.ogre.core :as o]
          '[com.brunobonacci.mulog :as µ]
+         '[clojure.tools.namespace.repl :refer [refresh]]
          '[mount.core :as mount])
 '(mount/start #'bananadine.matrix.connection/conn
               #'bananadine.matrix.sync/syncer
               #'bananadine.matrix.events/event-handler
               #'bananadine.matrix.invites/invite-handler
+              #'bananadine.matrix.mentions/mention-handler
+              #'bananadine.matrix.urls/url-handler
+              #'bananadine.matrix.sites.tanukitunes/tanuki-handler
               #'bananadine.db/dbcon)
 
 ;; SELinux - remember for local testing w/ nginx

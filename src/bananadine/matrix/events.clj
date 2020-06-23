@@ -15,12 +15,13 @@
 
 (ns bananadine.matrix.events
   (:require [bananadine.db :as db]
-            [bananadine.matrix.auth :as auth]
-            [bananadine.matrix.connection :refer [conn make-url]]
-            [bananadine.matrix.sync :refer [sync-pub]]
+            [bananadine.util :refer [extract-msg mk-chan]]
+            [bananadine.matrix.api :as api]
+            [bananadine.matrix.connection :refer [conn]]
+            [bananadine.matrix.sync :refer [syncer sync-pub]]
             [cheshire.core :refer :all]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub chan >! >!! <! <!! go]]
+            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [clojurewerkz.ogre.core :as o]
             [com.brunobonacci.mulog :as µ]
             [mount.core :refer [defstate]])
@@ -34,43 +35,54 @@
   :stop (stop-event-handler))
 
 (def event-state (atom {}))
-(def event-chan (chan))
+(def event-chan (mk-chan))
 (def event-pub (pub event-chan :msg-type))
-(def invite-pub (pub event-chan #(= (:msg-type %1) :invite)))
-(def sync-chan (chan))
-(sub sync-pub :msg-type sync-chan)
+(def sync-chan (mk-chan))
 
 (defn handle-invite-event
   [channel event]
-  (let [user-id (:user_id (auth/get-account-details))]
+  (let [user-id (:user_id (db/get-server-info))]
     (when (and (= (:type event) "m.room.member")
                (= (get-in event [:content :membership]) "invite")
                (= (:state_key event) user-id))
-      (go (>!! event-chan
-               {:msg-type :invite 
-                :channel channel
-                :inviter (:sender event)})))))
+      (µ/log {:msg-type :invite
+              :channel channel
+              :sender (:sender event)})
+      (go (>! event-chan
+              {:msg-type :invite
+               :channel channel
+               :sender (:sender event)})))))
 
 (defn handle-invite-data
   [[channel data]]
-  (doall (map #(handle-invite-event channel %1)
+  (doall (map #(handle-invite-event (name channel) %1)
               (get-in data [:invite_state :events]))))
 
 (defn handle-room-event
   [channel event]
-  (go (>!! event-chan
-           {:msg-type :room :event event})))
+  (let [user-id (:user_id (db/get-server-info))]
+    (when (and (= (:type event) "m.room.message")
+               (not= (:sender event) user-id))
+      (µ/log {:msg-type :msg
+              :msg (extract-msg event)})
+      (go (>!! event-chan
+               {:msg-type :msg
+                :msg (extract-msg event)
+                :channel channel
+                :sender (:sender event)})))))
 
 (defn handle-room-data
   [[channel data]]
   (doall (map #(handle-room-event channel %1)
-              (get-in data [:invite_state :events]))))
+              (get-in data [:timeline :events]))))
 
 (defn handle-syncdata
   [syncdata]
   (let [join-events (get-in syncdata [:rooms :join])
-        invite-events (get-in syncdata [:rooms :join])]
-    (doall (map handle-invite-data invite-events))
+        invite-events (get-in syncdata [:rooms :invite])]
+    (µ/log {:join-events (count join-events)
+            :invite-events (count invite-events)})
+    (doall (map handle-room-data join-events))
     (doall (map handle-invite-data invite-events))))
      
 
@@ -78,10 +90,11 @@
   []
   (swap! event-state assoc :running true)
   (go (while (:running @event-state)
-        (let [syncdata (<! sync-chan)]
-          (µ/log syncdata)
-          (handle-syncdata syncdata)))))
+        (let [{:keys [data]} (<! sync-chan)]
+          (handle-syncdata data))))
+  (sub sync-pub :sync sync-chan))
 
 (defn stop-event-handler
   []
-  (swap! event-state dissoc :running))
+  (swap! event-state dissoc :running)
+  (unsub sync-pub :sync sync-chan))

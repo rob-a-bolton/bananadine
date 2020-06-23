@@ -15,8 +15,10 @@
 
 (ns bananadine.matrix.invites
   (:require [bananadine.db :as db]
-            [bananadine.matrix.connection :refer [conn make-url]]
-            [bananadine.matrix.events :refer [invite-pub]]
+            [bananadine.util :as util]
+            [bananadine.matrix.api :as api]
+            [bananadine.matrix.connection :refer [conn]]
+            [bananadine.matrix.events :refer [event-pub event-handler]]
             [bananadine.matrix.sync :refer [sync-pub]]
             [cheshire.core :refer :all]
             [clj-http.client :as client]
@@ -35,35 +37,27 @@
 
 (def invite-state (atom {}))
 
-(def join-chan (chan))
+(def join-chan (util/mk-chan))
 (def join-pub (pub join-chan :joined))
 
-(def invite-chan (chan))
-(sub invite-pub :joined invite-chan)
+(def invite-chan (util/mk-chan))
+(sub event-pub :invite invite-chan)
 
-(defn join-room
+(defn join-room-and-publish
   [room-id inviter]
-  (client/post
-   (make-url (str "_matrix/client/r0/rooms/" room-id "/join"))
-   {:async? true
-    :as :json
-    :oauth-token (:token @conn)}
-   ; Success
-   (fn [response]
-     (>!! join-chan {:joined true
-                     :channel room-id})
-     (µ/log (:body response)))
-   ; Failure
-   (fn [exception]
-     (µ/log exception))))
+  (µ/log {:joining room-id})
+  (let [res (api/join-room room-id)]
+    (>! join-chan {:joined room-id
+                    :inviter inviter})))
 
 (defn start-invite-handler
   []
+  (swap! invite-state assoc :running true)
   (go (while (:running @invite-state)
         (let [event (<! invite-chan)]
-          (join-room (:channel event)
-                     (:inviter event)))))
-  (swap! invite-state assoc :running true))
+          (µ/log event)
+          (join-room-and-publish (:channel event)
+                                 (:inviter event))))))
 
 (defn stop-invite-handler
   []
