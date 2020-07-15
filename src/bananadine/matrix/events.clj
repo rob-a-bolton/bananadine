@@ -15,7 +15,7 @@
 
 (ns bananadine.matrix.events
   (:require [bananadine.db :as db]
-            [bananadine.util :refer [extract-msg mk-chan]]
+            [bananadine.util :as util]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.sync :refer [syncer sync-pub]]
@@ -27,24 +27,19 @@
             [mount.core :refer [defstate]])
   (:gen-class))
 
-(declare start-event-handler
-         stop-event-handler)
-
-(defstate event-handler
-  :start (start-event-handler)
-  :stop (stop-event-handler))
-
 (def event-state (atom {}))
-(def event-chan (mk-chan))
+(def event-chan (util/mk-chan))
 (def event-pub (pub event-chan :msg-type))
-(def sync-chan (mk-chan))
+(def sync-chan (util/mk-chan))
 
 (defn handle-invite-event
   [channel event]
+  (µ/log {:invite-handle event})
   (let [user-id (:user_id (db/get-server-info))]
     (when (and (= (:type event) "m.room.member")
                (= (get-in event [:content :membership]) "invite")
-               (= (:state_key event) user-id))
+               (= (:state_key event) user-id)
+               (not= (:sender event) user-id))
       (µ/log {:msg-type :invite
               :channel channel
               :sender (:sender event)})
@@ -64,10 +59,10 @@
     (when (and (= (:type event) "m.room.message")
                (not= (:sender event) user-id))
       (µ/log {:msg-type :msg
-              :msg (extract-msg event)})
+              :msg (util/extract-msg event)})
       (go (>!! event-chan
                {:msg-type :msg
-                :msg (extract-msg event)
+                :msg (util/extract-msg event)
                 :channel channel
                 :sender (:sender event)})))))
 
@@ -77,24 +72,18 @@
               (get-in data [:timeline :events]))))
 
 (defn handle-syncdata
-  [syncdata]
-  (let [join-events (get-in syncdata [:rooms :join])
-        invite-events (get-in syncdata [:rooms :invite])]
-    (µ/log {:join-events (count join-events)
-            :invite-events (count invite-events)})
-    (doall (map handle-room-data join-events))
-    (doall (map handle-invite-data invite-events))))
-     
+  [data]
+  (let [syncdata (:data data)]
+    (let [join-events (get-in syncdata [:rooms :join])
+          invite-events (get-in syncdata [:rooms :invite])]
+      (µ/log {:join-events (count join-events)
+              :invite-events (count invite-events)})
+      (doall (map handle-room-data join-events))
+      (doall (map handle-invite-data invite-events)))))
 
-(defn start-event-handler
-  []
-  (swap! event-state assoc :running true)
-  (go (while (:running @event-state)
-        (let [{:keys [data]} (<! sync-chan)]
-          (handle-syncdata data))))
-  (sub sync-pub :sync sync-chan))
-
-(defn stop-event-handler
-  []
-  (swap! event-state dissoc :running)
-  (unsub sync-pub :sync sync-chan))
+(util/setup-handlers
+ event-handler
+ event-state
+ [[sync-pub {:sync [sync-chan]}]]
+ sync-chan
+ handle-syncdata)

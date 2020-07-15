@@ -41,25 +41,26 @@
 (def join-pub (pub join-chan :joined))
 
 (def invite-chan (util/mk-chan))
-(sub event-pub :invite invite-chan)
+
 
 (defn join-room-and-publish
   [room-id inviter]
   (µ/log {:joining room-id})
   (let [res (api/join-room room-id)]
-    (>! join-chan {:joined room-id
-                    :inviter inviter})))
+    (go
+      (>! join-chan {:joined room-id
+                     :inviter inviter}))))
 
-(defn start-invite-handler
-  []
-  (swap! invite-state assoc :running true)
-  (go (while (:running @invite-state)
-        (let [event (<! invite-chan)]
-          (µ/log event)
-          (join-room-and-publish (:channel event)
-                                 (:inviter event))))))
+(defn handle-invite
+  [event]
+  (µ/log {:invite event})
+  (join-room-and-publish (:channel event)
+                         (:inviter event)))
 
-(defn stop-invite-handler
-  []
-  (swap! invite-state dissoc :running))
+(util/setup-handlers
+ invite-handler
+ invite-state
+ [[event-pub {:invite [invite-chan]}]]
+ invite-chan
+ handle-invite)
 

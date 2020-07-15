@@ -15,19 +15,33 @@
 
 (ns bananadine.util
   (:import [java.util Arrays])
-  (:require [clojure.string :refer [join]]
+  (:require [clojure.string :refer [join split]]
+            [net.cgrand.enlive-html :as en]
             [mount.core :refer [defstate start]]
             [clojure.set :refer [intersection]]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go go-loop close! sliding-buffer]]
             [pl.danieljanus.tagsoup :as tsoup]
+            [ring.util.codec :as rc]
             [com.brunobonacci.mulog :as µ])
   (:gen-class))
+
+
+(def user-agent "Bananadine pre-alpha")
 
 ;; I strongly dislike some java interop restrictions
 ;; Avert thine eyes and forget this function exists
 (defn blank-str-array
   []
   (Arrays/copyOf (into-array [""]) 0))
+
+(defn decode-query-params
+  [query-params]
+  (apply hash-map (flatten (map #(split %1 #"=") (split query-params #"&")))))
+
+(defn enlive-string
+  [page]
+  (with-open [s (clojure.java.io/input-stream (.getBytes page))]
+    (en/html-resource s)))
 
 (defn plain-msg
   [msg-tree]

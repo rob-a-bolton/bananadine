@@ -37,7 +37,7 @@
 (defn connect-db!
   []
   (reset! graph (o/open-graph {(Graph/GRAPH) (.getName Neo4jGraph)
-                               "gremlin.neo4j.directory" "/var/db/neo4j"}))
+                               "gremlin.neo4j.directory" "/home/rob/db/neo4j"}))
   (reset! g (o/traversal @graph))
   {:graph graph
    :g g})
@@ -53,11 +53,14 @@
   []
   (.commit (.tx @g)))
 
+(defn get-simple-vs
+  [label]
+  (o/traverse @g (o/V)
+                     (o/has-label label)
+                     (o/into-list!)))
 (defn get-simple-v
   [label]
-  (first (o/traverse @g (o/V)
-                     (o/has-label label)
-                     (o/into-list!))))
+  (first (get-simple-vs)))
 
 (defn get-props
   [label]
@@ -91,10 +94,15 @@
               (o/iterate!))
     (commit-db))
 
+(defn mk-simple-v!
+  [label]
+  (o/traverse @g (o/addV label)
+              (o/iterate!))
+  (commit-db))
+
 (defn make-server-entry!
   [host]
   (o/traverse @g (o/addV :server)
-                 (o/property :host host)
                  (o/next!))
   (commit-db))
 
@@ -103,7 +111,8 @@
   (o/traverse @g (o/V)
               (o/has-label :server)
               (o/drop)
-              (o/iterate!)))
+              (o/iterate!))
+  (commit-db))
 
 (defn get-server-info
   []
@@ -116,4 +125,6 @@
                 (o/has-label :server)
                 (o/property :txn (inc txn))
                 (o/iterate!))
+    (commit-db)
     txn))
+

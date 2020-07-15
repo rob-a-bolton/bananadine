@@ -15,56 +15,92 @@
 
 
 (ns bananadine.core
-  (:require [mount.core :refer [defstate start]]
-            [com.brunobonacci.mulog :as μ]
+  (:require [bananadine.bootstrap :refer [default-handlers]]
+            [bananadine.db :as db]
             [bananadine.logger]
-            [bananadine.matrix.connection :refer [conn]]
-            [bananadine.matrix.sync :refer [syncer]]
-            [bananadine.matrix.events :refer [event-handler]]
-            [bananadine.matrix.invites :refer [invite-handler]])
+            [bananadine.matrix.api :as api]
+            [clojure.tools.cli :refer [parse-opts]]
+            [com.brunobonacci.mulog :as μ]
+            [mount.core :refer [defstate start]])
   (:gen-class))
 
-;(μ/start-publisher! {:type :console})
-(μ/start-publisher!
- {:type :custom
-  :fqn-function "bananadine.logger/pretty-publisher"
-  :filename "/tmp/bananadine.edn"})
+;; "Custom" pretty printing logs
+;; i.e. baby's first custom logger for µ, straight from
+;; the example documentation
+
+
+(def cli-options
+  [["-r" "--register" "Register the bot"]
+   ["-d" "--host DOMAIN" "Specifies host domain"]
+   ["-u" "--username USER" "Specifies username"]
+   ["-p" "--password PASS" "Specifies password"]
+   [nil "--update" "Updates credentials"]
+   ["-l" "--logfile FILE" "Specifies log file location"
+    :default "/tmp/bananadine.edn"]
+   ["-h" "--help"]])
+
+(defn print-and-exit
+  [msg & {:keys [error] :or {error false}}]
+  (binding [*out* *err*]
+    (println msg)
+    (System/exit (if :error 1 0))))
+
+(defn error-and-exit
+  [msg]
+  (print-and-exit msg :error true))
+
+(defn try-register-user
+  [options]
+  (let [{:keys [host username password]} options]
+    (if (and host username password)
+      (do (db/make-server-entry!)
+          (api/register! (:host host)
+                         (:username options)
+                         (:password options))
+          (print-and-exit (format "Registered %s on %s" username host)))
+      (error-and-exit "Host, username, and password must be supplied to register"))))
+
+(defn try-update-user
+  [options]
+  (let [{:keys [host username password]} options]
+    (when-not (or host username password)
+      (error-and-exit "Need to provide host, username, or password to update."))
+    (when (empty? (db/get-server-info))
+      (db/make-server-entry!))
+    (when host
+      (db/set-simple-p! :server :host host))
+    (when username
+      (db/set-simple-p! :server :user_id (format "@%s:%s" username host)))
+    (when password
+      (db/set-simple-p! :server :password password))
+    (error-and-exit "Updated")))
+
+(defn print-help
+  [summary]
+  (error-and-exit (clojure.string/join \newline
+    ["Usage: lein run [OPTIONS]"
+     "Update credentials: lein run --update [OPTIONS]"
+     "Registration: lein run -r <OPTIONS>"
+     summary])))
+
+(defn validate-args
+  [args]
+  (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
+    (when (:help options)
+      (print-help summary))
+    (when (:register options)
+      (try-register-user options))
+    (when (:update options)
+      (try-update-user options))
+    options))
 
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (start)
-  (println "Hello, World!"))
-
-'(require '[bananadine.db :as db]
-         '[bananadine.util :as util]
-         '[bananadine.matrix.api :as api]
-         '[bananadine.matrix.sync :as msync]
-         '[bananadine.matrix.events :as mevents]
-         '[bananadine.matrix.invites :as minvites]
-         '[bananadine.matrix.mentions :as mentions]
-         '[bananadine.matrix.connection :refer [conn]]
-         '[bananadine.matrix.urls :as murls]
-         '[bananadine.matrix.sites.tanukitunes :as tanuki]
-         '[cheshire.core :refer :all]
-         '[hiccup.core :as hc]
-         '[clojure.pprint :refer [pprint]]
-         '[pl.danieljanus.tagsoup :as tsoup]
-         '[net.cgrand.enlive-html :as en]
-         '[clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
-         '[clj-http.client :as client]
-         '[clojurewerkz.ogre.core :as o]
-         '[com.brunobonacci.mulog :as µ]
-         '[clojure.tools.namespace.repl :refer [refresh]]
-         '[mount.core :as mount])
-'(mount/start #'bananadine.matrix.connection/conn
-              #'bananadine.matrix.sync/syncer
-              #'bananadine.matrix.events/event-handler
-              #'bananadine.matrix.invites/invite-handler
-              #'bananadine.matrix.mentions/mention-handler
-              #'bananadine.matrix.urls/url-handler
-              #'bananadine.matrix.sites.tanukitunes/tanuki-handler
-              #'bananadine.db/dbcon)
-
-;; SELinux - remember for local testing w/ nginx
-;; setsebool -P httpd_can_network_connect 1
+  (clojure.pprint/pprint args)
+  (let [options (validate-args args)]
+    (μ/start-publisher!
+     {:type :custom
+      :fqn-function "bananadine.logger/pretty-publisher"
+      :filename (:logfile options)})
+    (start)))

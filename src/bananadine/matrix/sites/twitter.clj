@@ -14,57 +14,54 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 
-(ns bananadine.matrix.sites.tanukitunes
+(ns bananadine.matrix.sites.twitter
   (:require [mount.core :refer [defstate start]]
+            [bananadine.db :as db]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.urls :refer [url-pub]]
             [bananadine.util :as util]
+            [net.cgrand.enlive-html :as en]
             [clojure.java.io :refer [as-url]]
-            [clojure.string :refer [join]]
+            [clojure.string :refer [join split]]
             [clj-http.client :as client]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [com.brunobonacci.mulog :as µ])
   (:gen-class))
 
-;; (declare start-tanuki-handler stop-tanuki-handler)
+(def twitter-state (atom {}))
+(def twitter-chan (util/mk-chan))
 
-;; (defstate tanuki-handler
-;;   :start (start-tanuki-handler)
-;;   :stop (stop-tanuki-handler))
+(defn twitter-key
+  []
+  (:twitterkey (db/get-server-info)))
 
-(def tanuki-state (atom {}))
-(def tanuki-chan (util/mk-chan))
-
-(defn album-link
-  [album]
-  [:a {:href (:id album)} (:name album)])
-
-(defn artist-link
-  [artist]
-  [:a {:href (:id artist)} (:name artist)])
-
-(defn get-tanuki-data
+(defn get-tweet-data
   [url]
-  (let [data (:body (client/get (str url) {:accept :json :as :json}))]
+  (µ/log {:try-url url})
+  (let [post-id (last (split (.getPath url) #"/"))
+        api-url "https://api.twitter.com/1.1/statuses/show.json"
+        page (:body (client/get api-url
+                                {:as :json
+                                 :query-params {:id post-id}
+                                 :oauth-token (twitter-key)}))]
+    (µ/log {:page page})
     [:p
-     [:font {:color "#e28d69"} [:h2 (:name data)]]
-     [:font {:color "#e2c169"} (album-link (:album data))]
+     (:text page)
      [:br]
-     [:font {:color "#b2e269"}
-      (interpose ", " (map artist-link (:artists data)))]]))
+     "~ " (get-in page [:user :screen_name])]))
 
 (defn handle-link
   [event]
-  (µ/log {:tanuki event})
   (let [{:keys [channel sender host url]} event
-        tanuki-data (get-tanuki-data url)]
-    (µ/log tanuki-data)
-    (api/msg-room! channel tanuki-data)))
+        tweet-data (get-tweet-data url)]
+    (µ/log tweet-data)
+    (api/msg-room! channel tweet-data)))
 
 (util/setup-handlers
- tanuki-handler
- tanuki-state
- [[url-pub {"tanukitunes.com" [tanuki-chan]}]]
- tanuki-chan
+ twitter-handler
+ twitter-state
+ [[url-pub {"twitter.com" [twitter-chan]
+            "mobile.twitter.com" [twitter-chan]}]]
+ twitter-chan
  handle-link)
 
