@@ -68,7 +68,9 @@
     (when-not (or host username password)
       (error-and-exit "Need to provide host, username, or password to update."))
     (when (empty? (db/get-server-info))
-      (db/make-server-entry!))
+      (if host
+        (db/make-server-entry! host)
+        (error-and-exist "Must provide host upon first registration/credential update")))
     (when host
       (db/set-simple-p! :server :host host))
     (when username

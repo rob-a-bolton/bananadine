@@ -8,7 +8,7 @@ Clone the repo and run `lein deps`
 
 ## Usage
 
-Run `lein run -c config.edn` to start the app  
+Run `lein run -- -c config.edn` to start the app  
 Config is expected to be an edn file containing `:db-dir` and `:log-dir`  
 A default config file is included in this repository, using `$CWD/db` as the log directory.  
 

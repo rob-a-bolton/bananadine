@@ -21,7 +21,8 @@
             [clojurewerkz.ogre.core :as o]
             [clojure.set :refer [rename-keys]]
             [com.brunobonacci.mulog :as μ]
-            [mount.core :refer [defstate]])
+            [mount.core :refer [defstate]]
+            [omniconf.core :as cfg])
   (:gen-class))
 
 
@@ -37,7 +38,7 @@
 (defn connect-db!
   []
   (reset! graph (o/open-graph {(Graph/GRAPH) (.getName Neo4jGraph)
-                               "gremlin.neo4j.directory" "/home/rob/db/neo4j"}))
+                               "gremlin.neo4j.directory" (cfg/get :db-dir)}))
   (reset! g (o/traversal @graph))
   {:graph graph
    :g g})
