@@ -70,7 +70,7 @@
     (when (empty? (db/get-server-info))
       (if host
         (db/make-server-entry! host)
-        (error-and-exist "Must provide host upon first registration/credential update")))
+        (error-and-exit "Must provide host upon first registration/credential update")))
     (when host
       (db/set-simple-p! :server :host host))
     (when username
