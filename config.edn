@@ -1,0 +1,2 @@
+{:db-dir "./db"
+ :log-dir "/tmp/bananadine.edn"}

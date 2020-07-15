@@ -26,7 +26,7 @@
   (:gen-class))
 
 
-(def user-agent "Bananadine pre-alpha")
+(def user-agent "Bananadine pre-alpha <rob.a.bolton@gmail.com>")
 
 ;; I strongly dislike some java interop restrictions
 ;; Avert thine eyes and forget this function exists

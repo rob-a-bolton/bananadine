@@ -27,6 +27,7 @@
                                org.clojure/data.xml]]
                  [clojurewerkz/ogre "3.4.6.0"]
                  [com.brunobonacci/mulog "0.2.0"]
+                 [com.grammarly/omniconf "0.4.1"]
                  [enlive "1.1.6"]
                  [hiccup "1.0.5"]
                  [mount "0.1.16"]

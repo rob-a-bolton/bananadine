@@ -21,7 +21,8 @@
             [bananadine.matrix.api :as api]
             [clojure.tools.cli :refer [parse-opts]]
             [com.brunobonacci.mulog :as μ]
-            [mount.core :refer [defstate start]])
+            [mount.core :refer [defstate start]]
+            [omniconf.core :as cfg])
   (:gen-class))
 
 ;; "Custom" pretty printing logs
@@ -35,8 +36,9 @@
    ["-u" "--username USER" "Specifies username"]
    ["-p" "--password PASS" "Specifies password"]
    [nil "--update" "Updates credentials"]
-   ["-l" "--logfile FILE" "Specifies log file location"
-    :default "/tmp/bananadine.edn"]
+   ;; ["-l" "--logfile FILE" "Specifies log file location"
+   ;;  :default "/tmp/bananadine.edn"]
+   ["-c" "--config FILE" "Specifies config file"]
    ["-h" "--help"]])
 
 (defn print-and-exit
@@ -83,11 +85,23 @@
      "Registration: lein run -r <OPTIONS>"
      summary])))
 
+(cfg/define
+  {:db-dir {:description "Location of database directory"
+            :type :string
+            :required true}
+   :log-dir {:description "Path of log file"
+             :type :string
+             :required false}})
+
 (defn validate-args
   [args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
     (when (:help options)
       (print-help summary))
+    (if (:config options)
+      (do (cfg/populate-from-file (:config options))
+          (start #'bananadine.db/dbcon))
+      (error-and-exit "No config file specified"))
     (when (:register options)
       (try-register-user options))
     (when (:update options)
@@ -97,10 +111,9 @@
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (clojure.pprint/pprint args)
   (let [options (validate-args args)]
     (μ/start-publisher!
      {:type :custom
       :fqn-function "bananadine.logger/pretty-publisher"
-      :filename (:logfile options)})
+      :filename (cfg/get :log-dir)})
     (start)))
