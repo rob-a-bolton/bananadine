@@ -38,10 +38,6 @@
         full-stars (repeat num-full "★")
         empty-stars (repeat num-empty "☆")]
     (join "" (concat full-stars empty-stars))))
-
-(defn fmt-desc
-  [desc]
-  (interpose [:br] (split desc #"\n")))
   
 (defn get-vid-info
   [vid-id]
@@ -62,7 +58,7 @@
      [:br]
      [:font {:color "#f9c22b"} (to-stars stars)]
      [:br]
-     (fmt-desc desc)
+     [:pre [:code desc]]
      [:br]
      [:font {:color "#999999"} [:em [:strong "Tags: "] (join ", " tags)]]]))
 
