@@ -60,7 +60,8 @@
      [:br]
      [:pre [:code desc]]
      [:br]
-     [:font {:color "#999999"} [:em [:strong "Tags: "] (join ", " tags)]]]))
+     ;;[:font {:color "#999999"} [:em [:strong "Tags: "] (join ", " tags)]]
+     ]))
 
 (defn handle-link
   [event]
@@ -76,6 +77,4 @@
  youtube-state
  [[url-pub {"youtube.com" [youtube-chan]
             "www.youtube.com" [youtube-chan]}]]
- youtube-chan
- handle-link)
-
+ [[youtube-chan handle-link]])

@@ -14,13 +14,15 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 (ns bananadine.db
-  (:import [org.apache.tinkerpop.gremlin.structure Graph]
-           [org.apache.tinkerpop.gremlin.structure.util.empty EmptyVertexProperty]
-           [org.apache.tinkerpop.gremlin.neo4j.structure Neo4jGraph])
+  (:import [com.mongodb MongoOptions ServerAddress])
   (:require [bananadine.util :refer [blank-str-array]]
-            [clojurewerkz.ogre.core :as o]
             [clojure.set :refer [rename-keys]]
+            [clojure.string :as s]
             [com.brunobonacci.mulog :as μ]
+            [monger.collection :as mc]
+            [monger.core :as mg]
+            [monger.credentials :as mcr]
+            [monger.operators :refer :all]
             [mount.core :refer [defstate]]
             [omniconf.core :as cfg])
   (:gen-class))
@@ -32,100 +34,97 @@
   :start (connect-db!)
   :stop (disconnect-db!))
 
-(def graph (atom nil))
-(def g (atom nil))
+(def act-doc "matrix_accounts")
 
 (defn connect-db!
   []
-  (reset! graph (o/open-graph {(Graph/GRAPH) (.getName Neo4jGraph)
-                               "gremlin.neo4j.directory" (cfg/get :db-dir)}))
-  (reset! g (o/traversal @graph))
-  {:graph graph
-   :g g})
+  (let [{:keys [db-name host user pass]} (cfg/get :db)
+        cred (mcr/create user db-name pass)
+        dbc (mg/connect-with-credentials host cred)
+        dbd (mg/get-db dbc db-name)]
+    {:dbc dbc :dbd dbd}))
 
 (defn disconnect-db!
   []
-  (.close @graph)
-  (reset! graph nil)
-  (reset! g nil)
-  {})
+  (mg/disconnect (:dbc dbcon))
+  nil)
 
-(defn commit-db
-  []
-  (.commit (.tx @g)))
+(defn get-act
+  ([host user]
+   (mc/find-one-as-map (:dbd dbcon) act-doc {:host host :user user}))
+  ([]
+   (get-act (cfg/get :host) (cfg/get :user))))
 
-(defn get-simple-vs
-  [label]
-  (o/traverse @g (o/V)
-                     (o/has-label label)
-                     (o/into-list!)))
-(defn get-simple-v
-  [label]
-  (first (get-simple-vs)))
+(defn get-user-id
+  ([host user]
+   (let [act (get-act host user)]
+     (format "@%s:%s" (:user act) (:host act))))
+  ([]
+   (get-user-id (cfg/get :host) (cfg/get :user))))
 
-(defn get-props
-  [label]
-  (apply merge 
-         (map (fn [prop] {(.key prop) (.value prop)})
-              (o/traverse @g (o/V) 
-                          (o/has-label label)
-                          (o/properties)
-                          (o/into-list!)))))
+(defn ins-act
+  [host user pass device token]
+  (mc/insert (:dbd dbcon) act-doc
+             {:host host
+              :user user
+              :pass pass
+              :device device
+              :txn-id 0
+              :token token}))
 
-(defn get-props-kw
-  [label]
-  (let [props (get-props label)]
-    (zipmap (map keyword (keys props))
-            (vals props))))
-
-(defn get-simple-p
-  [label property]
-  (first
-   (map #(.value %1) 
-        (o/traverse @g (o/V) 
-                    (o/has-label label)
-                    (o/properties property)
-                    (o/into-list!)))))
-
-(defn set-simple-p!
-  [label property value]
-  (o/traverse @g (o/V)
-              (o/has-label label)
-              (o/property property value)
-              (o/iterate!))
-    (commit-db))
-
-(defn mk-simple-v!
-  [label]
-  (o/traverse @g (o/addV label)
-              (o/iterate!))
-  (commit-db))
-
-(defn make-server-entry!
-  [host]
-  (o/traverse @g (o/addV :server)
-                 (o/next!))
-  (commit-db))
-
-(defn wipe-server-entry!
-  []
-  (o/traverse @g (o/V)
-              (o/has-label :server)
-              (o/drop)
-              (o/iterate!))
-  (commit-db))
-
-(defn get-server-info
-  []
-  (get-props-kw :server))
+(defn del-act
+  [host user]
+  (mc/remove (:dbd dbcon) act-doc {:host host :user user}))
 
 (defn get-txn-id
-  []
-  (let [txn (or (get-simple-p :server :txn) 0)]
-    (o/traverse @g (o/V)
-                (o/has-label :server)
-                (o/property :txn (inc txn))
-                (o/iterate!))
-    (commit-db)
-    txn))
+  ([host user]
+   (let [act (get-act host user)]
+     (get act :txn-id)))
+  ([]
+   (get-txn-id (cfg/get :host) (cfg/get :user))))
+
+(defn inc-txn-id!
+  ([host user]
+   (mc/update (:dbd dbcon)
+              act-doc
+              {:host host :user user}
+              {$inc {:txn-id 1}}
+              {:upsert true}))
+  ([]
+   (inc-txn-id! (cfg/get :host) (cfg/get :user))))
+             
+(defn get-token
+  ([host user]
+   (let [act (get-act host user)]
+     (get act :token)))
+  ([]
+   (get-token (cfg/get :host) (cfg/get :user))))
+
+(defn set-token!
+  ([host user token]
+   (mc/update (:dbd dbcon)
+              act-doc
+              {:host host :user user}
+              {$set {:token token}}))
+  ([token]
+   (set-token! (cfg/get :host) (cfg/get :user) token)))
+
+(defn get-in-act
+  ([host user ks]
+   (let [act (get-act host user)
+         ks (if (seqable? ks) ks [ks])]
+     (get-in act ks)))
+  ([ks]
+   (get-in-act (cfg/get :host) (cfg/get :user) ks)))
+
+(defn set-in-act!
+  ([host user ks v]
+   (let [ks (map name (if (seqable? ks) ks [ks]))
+         dotty-ks (s/join "." ks)]
+     (mc/update (:dbd dbcon)
+                act-doc
+                {:host host :user user}
+                {$set {dotty-ks v}})))
+  ([ks v]
+   (set-in-act! (cfg/get :host) (cfg/get :user) ks v)))
 

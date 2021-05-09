@@ -25,10 +25,6 @@
 
 (declare start-url-handler stop-url-handler)
 
-(defstate url-handler
-  :start (start-url-handler)
-  :stop (stop-url-handler))
-
 (def url-state (atom {}))
 
 (def msg-chan (util/mk-chan))
@@ -43,9 +39,8 @@
   (let [out-evt (merge event {:host (.getHost url)
                               :url url})]
     (µ/log {:host (.getHost url) :url url})
-    (go
-      (>! url-chan out-evt)
-      (>! urls-chan out-evt))))
+    (go (>! url-chan out-evt)
+        (>! urls-chan out-evt))))
 
 (defn extract-urls
   [event]
@@ -54,15 +49,8 @@
     (µ/log {:urls urls})
     (doall (map #(publish-url %1 event) urls))))
 
-(defn start-url-handler
-  []
-  (swap! url-state assoc :running true)
-  (go (while (:running @url-state)
-        (µ/log {:checking :messages})
-        (extract-urls (<! msg-chan))))
-  (sub event-pub :msg msg-chan))
-
-(defn stop-url-handler
-  []
-  (swap! url-state dissoc :running)
-  (unsub event-pub :msg msg-chan))
+(util/setup-handlers
+ url-handler
+ url-state
+ [[event-pub {:msg [msg-chan]}]]
+ [[msg-chan extract-urls]])

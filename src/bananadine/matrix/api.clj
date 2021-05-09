@@ -14,82 +14,63 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 (ns bananadine.matrix.api
-  (:require [mount.core :refer [defstate start]]
-            [clojure.string :refer [split]]
-            [cheshire.core :refer :all]
+  (:require [bananadine.db :as db]
+            [bananadine.util :refer [plain-msg]]
+            [cheshire.core :refer [generate-string]]
+            [clj-http.client :as client]
             [com.brunobonacci.mulog :as µ]
-            [hiccup.core :as hc]
-            [bananadine.db :as db]
-            [bananadine.util :refer [plain-msg full-user->local-user]]
-            [clojurewerkz.ogre.core :as o]
-            [clj-http.client :as client])
+            [hiccup.core :as hc])
   (:gen-class))
 
 (defn make-url
   "Given a stub, create a URL for the server details from db"
   [stub]
   (str "https://"
-       (db/get-simple-p :server :host)
+       (db/get-in-act :host)
        "/"
        stub))
-
-(defn $id
-  "If ID is keyword, convert to string, else return as-is"
-  [id]
-  (if (keyword? id)
-    (name id)
-    id))
 
 (defn get-rooms
   []
   (:body (client/get
-          (make-url "/_matrix/client/r0/joined_rooms")
+          (make-url "_matrix/client/r0/joined_rooms")
           {:as :json
-           :oauth-token (:access_token (db/get-server-info))})))
+           :oauth-token (db/get-token)})))
 
 (defn register
   "Registers a user and returns the server response"
-  [host username password]
+  [host user pass]
   (let [res (client/post
              (format "https://%s/_matrix/client/r0/register" host)
              {:as :json
               :body (generate-string {:auth {:type "m.login.dummy"}
-                                      :username username
-                                      :password password})})
+                                      :username user
+                                      :password pass})})
         {:keys [:user_id :access_token :device_id]} (:body res)]
-    {:user_id user_id
-     :access_token access_token
-     :device_id device_id}))
+    {:user-id user_id
+     :access-token access_token
+     :device-id device_id}))
 
 (defn register!
   "Registers a user, updates login details in db, and returns server response"
-  [host username password]
-  (let [res (register host username password)
-        {:keys [:user_id :access_token :device_id :password]} res]    
-    (o/traverse @db/g
-                (o/V)
-                (o/has-label :server)
-                (o/property :host user_id)
-                (o/property :user_id user_id)
-                (o/property :access_token access_token)
-                (o/property :password password)
-                (o/property :device_id device_id)
-                (o/iterate!))
-    (db/commit-db)
+  [host user pass]
+  (let [res (register host user pass)
+        {:keys [access-token device-id]} res]
+    (db/ins-act host user pass device-id access-token)
     res))
 
 (defn login
   "Logs in to server with stored credentials, returns server response"
   []
-  (let [{:keys [:user_id :access_token :device_id :password]} (db/get-props-kw :server)
+  (let [{:keys [:user :pass]} (db/get-act)
         res (client/post
              (make-url "_matrix/client/r0/login")
              {:as :json
               :body (generate-string
                      {:type "m.login.password"
-                      :password password
+                      :password pass
                       :identifier {:type "m.id.user"
-                                   :user (full-user->local-user user_id)}})})]
+                                   :user user}})})]
     (:body res)))
 
 (defn login!
@@ -97,22 +78,24 @@
   []
   (let [res (login)
         token (:access_token res)]
-    (o/traverse @db/g
-                (o/V)
-                (o/has-label :server)
-                (o/property :access_token token)
-                (o/iterate!))
-    (db/commit-db)
+    (db/set-token! token)
     res))
 
 (defn get-sync-args
   []
-  (let [sv (db/get-server-info)
-        timeout (or (:timeout sv) 55000)
-        next-batch (:next-batch sv)]
+  (let [act (db/get-act)
+        timeout (or (:timeout act) 55000)
+        next-batch (:next-batch act)]
     (when next-batch
       {:query-params {:timeout timeout
                       :since next-batch}})))
+
+(defn join-room
+  [room-id]
+  (:body (client/post
+          (make-url (str "_matrix/client/r0/rooms/" room-id "/join"))
+          {:as :json
+           :oauth-token (db/get-token)})))
 
 (defn sync*
   "Syncs with server, returns response"
@@ -122,26 +105,22 @@
          (make-url "_matrix/client/r0/sync")
          (merge 
           {:as :json
-           :oauth-token (:access_token (db/get-server-info))}
+           :oauth-token (db/get-token)}
           (when-not full
             (get-sync-args))))]
     (:body res)))
 
 (defn sync!
-  "Syncs with server, updates next-batch, and returns response"
+  "Syncs with server, updates next-batch, and returns response. Joins any invites"
   [& {:keys [full]}]
   (let [body (sync* :full full)
-        next-batch (:next_batch body)]
+        next-batch (:next_batch body)
+        invites (keys (get-in body [:rooms :invite]))]
     (when next-batch
-      (db/set-simple-p! :server :next-batch next-batch))
+      (db/set-in-act! :next-batch next-batch))
+    (doseq [room-id invites]
+      (join-room (name room-id)))
     body))
-
-(defn join-room
-  [room-id]
-  (:body (client/post
-          (make-url (str "_matrix/client/r0/rooms/" room-id "/join"))
-          {:as :json
-           :oauth-token (:access_token (db/get-server-info))})))
 
 ;; Clients should limit the HTML they render to avoid Cross-Site Scripting, HTML injection, and similar attacks. The strongly suggested set of HTML tags to permit, denying the use and rendering of anything else, is: font, del, h1, h2, h3, h4, h5, h6, blockquote, p, a, ul, ol, sup, sub, li, b, i, u, strong, em, strike, code, hr, br, div, table, thead, tbody, tr, th, td, caption, pre, span, img.
 
@@ -154,18 +133,19 @@
 ;; code:	class (only classes which start with language- for syntax highlighting)
 
 (defn msg-room!
-  [room-id msg]
+  [room-id msg & {:keys [notice] :or {notice true}}]
   (µ/log {:room-id room-id :msg msg})
   (let [res (client/put
              (make-url (str "/_matrix/client/r0/rooms/"
-                            ($id room-id)
+                            (name room-id)
                             "/send/m.room.message/"
                             (db/get-txn-id)))
              {:as :json
-              :oauth-token (:access_token (db/get-server-info))
+              :oauth-token (db/get-token)
               :body (generate-string
-                     {:msgtype "m.text"
+                     {:msgtype (if notice "m.notice" "m.text")
                       :format "org.matrix.custom.html"
                       :formatted_body (hc/html msg)
                       :body (plain-msg msg)})})]
+    (db/inc-txn-id!)
     (:body res)))

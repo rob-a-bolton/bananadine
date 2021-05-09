@@ -20,7 +20,7 @@
             [bananadine.logger]
             [bananadine.matrix.api :as api]
             [clojure.tools.cli :refer [parse-opts]]
-            [com.brunobonacci.mulog :as μ]
+            [com.brunobonacci.mulog :as mu]
             [mount.core :refer [defstate start]]
             [omniconf.core :as cfg])
   (:gen-class))
@@ -35,7 +35,7 @@
    ["-d" "--host DOMAIN" "Specifies host domain"]
    ["-u" "--username USER" "Specifies username"]
    ["-p" "--password PASS" "Specifies password"]
-   [nil "--update" "Updates credentials"]
+   [nil "--update" "Updates password"]
    ;; ["-l" "--logfile FILE" "Specifies log file location"
    ;;  :default "/tmp/bananadine.edn"]
    ["-c" "--config FILE" "Specifies config file"]
@@ -53,30 +53,18 @@
 
 (defn try-register-user
   [options]
-  (let [{:keys [host username password]} options]
-    (if (and host username password)
-      (do (db/make-server-entry!)
-          (api/register! (:host host)
-                         (:username options)
-                         (:password options))
-          (print-and-exit (format "Registered %s on %s" username host)))
+  (let [{:keys [host user pass]} options]
+    (if (and host user pass)
+      (do (api/register! host user pass)
+          (print-and-exit (format "Registered %s on %s" user host)))
       (error-and-exit "Host, username, and password must be supplied to register"))))
 
 (defn try-update-user
   [options]
-  (let [{:keys [host username password]} options]
-    (when-not (or host username password)
-      (error-and-exit "Need to provide host, username, or password to update."))
-    (when (empty? (db/get-server-info))
-      (if host
-        (db/make-server-entry! host)
-        (error-and-exit "Must provide host upon first registration/credential update")))
-    (when host
-      (db/set-simple-p! :server :host host))
-    (when username
-      (db/set-simple-p! :server :user_id (format "@%s:%s" username host)))
-    (when password
-      (db/set-simple-p! :server :password password))
+  (let [{:keys [host user pass]} options]
+    (when-not (and host user pass)
+      (error-and-exit "Need to provide host, username and password to update."))
+    (db/set-in-act! host user :pass pass)
     (error-and-exit "Updated")))
 
 (defn print-help
@@ -88,9 +76,27 @@
      summary])))
 
 (cfg/define
-  {:db-dir {:description "Location of database directory"
-            :type :string
-            :required true}
+  {:db {:nested {:host {:type :string
+                        :required true
+                        :description "MongoDb host"}
+                 :user {:type :string
+                        :required true
+                        :description "MongoDb user"}
+                 :pass {:type :string
+                        :required true
+                        :description "MongoDb pass"}
+                 :db-name {:type :string
+                           :required true
+                           :description "MongoDb DB"}}}
+   :host {:type :string
+          :required true
+          :description "Matrix host"}
+   :user {:type :string
+          :required true
+          :description "Matrix username"}
+   :pass {:type :string
+          :required false
+          :description "Matrix password"}
    :log-dir {:description "Path of log file"
              :type :string
              :required false}})
@@ -114,7 +120,7 @@
   "I don't do a whole lot ... yet."
   [& args]
   (let [options (validate-args args)]
-    (μ/start-publisher!
+    (mu/start-publisher!
      {:type :custom
       :fqn-function "bananadine.logger/pretty-publisher"
       :filename (cfg/get :log-dir)})

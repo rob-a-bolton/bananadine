@@ -21,7 +21,6 @@
             [cheshire.core :refer :all]
             [clj-http.client :as client]
             [clojure.core.async :refer [pub chan >! >!! <! <!! go]]
-            [clojurewerkz.ogre.core :as o]
             [com.brunobonacci.mulog :as µ]
             [mount.core :refer [defstate]])
   (:gen-class))
@@ -40,12 +39,13 @@
 (defn start-syncer!
   []
   (swap! sync-state assoc :running true)
-  (go (while (:running @sync-state)
-        (try
-          (>! sync-chan {:msg-type :sync
-                         :data (api/sync!)})
-          (catch Exception e
-            (µ/log (.getMessage e))))))
+  (future
+    (loop [sync-res (api/sync!)]
+      (µ/log {:sync-loop sync-res})
+      (when (:running @sync-state)
+        (>!! sync-chan {:msg-type :sync
+                        :data sync-res})
+        (recur (api/sync!)))))
   sync-state)
 
 

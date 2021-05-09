@@ -15,7 +15,7 @@
 
 (ns bananadine.matrix.mentions
   (:require [bananadine.db :as db]
-            [bananadine.util :refer [full-user->local-user mk-chan]]
+            [bananadine.util :refer [mk-chan]]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.events :refer [event-handler event-pub]]
@@ -23,7 +23,6 @@
             [clj-http.client :as client]
             [clojure.core.async :refer [pub sub chan >! >!! <! <!! go]]
             [clojure.string :refer [includes?]]
-            [clojurewerkz.ogre.core :as o]
             [com.brunobonacci.mulog :as µ]
             [mount.core :refer [defstate]])
   (:gen-class))
@@ -42,12 +41,12 @@
 
 (defn get-mention-link
   []
-  (format "https://matrix.to/#/%s" (:user_id (db/get-server-info))))
+  (format "https://matrix.to/#/%s" (db/get-user-id)))
 
 (defn get-mentions
   [msg]
   (let [link (get-mention-link)
-        name (full-user->local-user (:user_id (db/get-server-info)))
+        name (db/get-in-act :user)
         plain (:plain msg)
         html (:html msg)]
     (cond

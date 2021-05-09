@@ -25,19 +25,22 @@
                  [clj-tagsoup/clj-tagsoup "0.3.0"
                   :exclusions [org.clojure/clojure
                                org.clojure/data.xml]]
-                 [clojurewerkz/ogre "3.4.6.0"]
+                 [com.novemberain/monger "3.1.0"]
                  [com.brunobonacci/mulog "0.2.0"]
                  [com.grammarly/omniconf "0.4.1"]
                  [enlive "1.1.6"]
                  [hiccup "1.0.5"]
+                 [metosin/reitit "0.5.4"]
                  [mount "0.1.16"]
-                 [org.apache.tinkerpop/neo4j-gremlin "3.4.6"]
                  [org.clojure/core.async "1.2.603"]
                  [org.clojure/data.xml "0.0.8"]
                  [org.clojure/tools.cli "1.0.194"]
                  [org.clojure/tools.namespace "1.0.0"]
-                 [org.neo4j/neo4j-tinkerpop-api-impl "0.7-3.2.3"]
+                 [ring/ring-core "1.8.1"]
                  [ring/ring-codec "1.1.2"]
+                 [ring/ring-devel "1.8.1"]
+                 [ring/ring-jetty-adapter "1.8.1"]
+                 [ring-basic-authentication "1.0.5"]
                  [org.clojure/clojure "1.10.0"]]
   :main ^:skip-aot bananadine.core
   :target-path "target/%s"

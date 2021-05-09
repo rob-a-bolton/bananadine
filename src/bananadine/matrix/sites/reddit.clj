@@ -85,5 +85,4 @@
  reddit-state
  [[url-pub {"reddit.com" [reddit-chan]
             "www.reddit.com" [reddit-chan]}]]
- reddit-chan
- handle-link)
+ [[reddit-chan handle-link]])

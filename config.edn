@@ -1,2 +1,9 @@
-{:db-dir "./db"
- :log-dir "/tmp/bananadine.edn"}
+{:db {:host "localhost"
+      :user "bananadine"
+      :pass "password"
+      :db-name "bananadine"}
+ :host "matrix.localhost"
+ :user "bananadine"
+ :pass "password"
+ :log-dir "/tmp/bananadine.edn"
+ :web-port 3000}

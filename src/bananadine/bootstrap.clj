@@ -18,8 +18,8 @@
   (:require [bananadine.db :refer [dbcon]]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.events :refer [event-handler]]
-            [bananadine.matrix.invites :refer [invite-handler]]
             [bananadine.matrix.mentions :refer [mention-handler]]
+            [bananadine.matrix.rooms :refer [room-handler]]
             [bananadine.matrix.sites.generic :refer [generic-handler]]
             [bananadine.matrix.sites.reddit :refer [reddit-handler]]
             [bananadine.matrix.sites.tanukitunes :refer [tanuki-handler]]
@@ -30,15 +30,15 @@
   (:gen-class))
 
 (def default-handlers
-  [dbcon
-   conn
+  [conn
+   dbcon
    event-handler
-   invite-handler
-   mention-handler
    generic-handler
+   mention-handler
    reddit-handler
+   room-handler
+   syncer
    tanuki-handler
    twitter-handler
-   youtube-handler
-   syncer
-   url-handler])
+   url-handler
+   youtube-handler])

@@ -33,7 +33,7 @@
 
 (defn twitter-key
   []
-  (:twitterkey (db/get-server-info)))
+  (db/get-in-act :twitterkey))
 
 (defn get-tweet-data
   [url]
@@ -62,6 +62,4 @@
  twitter-state
  [[url-pub {"twitter.com" [twitter-chan]
             "mobile.twitter.com" [twitter-chan]}]]
- twitter-chan
- handle-link)
-
+ [[twitter-chan handle-link]])

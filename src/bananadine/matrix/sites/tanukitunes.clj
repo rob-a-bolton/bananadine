@@ -65,6 +65,4 @@
  tanuki-handler
  tanuki-state
  [[url-pub {"tanukitunes.com" [tanuki-chan]}]]
- tanuki-chan
- handle-link)
-
+ [[tanuki-chan handle-link]])

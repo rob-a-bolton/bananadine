@@ -14,38 +14,37 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 (ns bananadine.util
-  (:import [java.util Arrays])
-  (:require [clojure.string :refer [join split]]
-            [net.cgrand.enlive-html :as en]
-            [mount.core :refer [defstate start]]
-            [clojure.set :refer [intersection]]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go go-loop close! sliding-buffer]]
-            [pl.danieljanus.tagsoup :as tsoup]
-            [ring.util.codec :as rc]
-            [com.brunobonacci.mulog :as µ])
+            [com.brunobonacci.mulog :as mu]
+            [mount.core :as mount]
+            [mount.tools.graph :refer [states-with-deps]]
+            [net.cgrand.enlive-html :as en]
+            [pl.danieljanus.tagsoup :as tsoup])
   (:gen-class))
 
 
 (def user-agent "Bananadine pre-alpha <rob.a.bolton@gmail.com>")
 
-;; I strongly dislike some java interop restrictions
-;; Avert thine eyes and forget this function exists
 (defn blank-str-array
   []
-  (Arrays/copyOf (into-array [""]) 0))
+  (make-array String 0))
 
 (defn decode-query-params
   [query-params]
-  (apply hash-map (flatten (map #(split %1 #"=") (split query-params #"&")))))
+  (apply hash-map (flatten (map #(str/split %1 #"=") (str/split query-params #"&")))))
 
 (defn enlive-string
   [page]
-  (with-open [s (clojure.java.io/input-stream (.getBytes page))]
+  (with-open [s (io/input-stream (.getBytes page))]
     (en/html-resource s)))
 
 (defn plain-msg
   [msg-tree]
-  (join " " (filter string? (flatten msg-tree))))
+  (if (string? msg-tree)
+    msg-tree
+    (str/join " " (filter string? (flatten msg-tree)))))
 
 (defn extract-msg
   [event]
@@ -59,25 +58,15 @@
   [user-id]
   (second (clojure.string/split user-id #"[:@]")))
 
-(defmacro go-consume
-  [channel handler]
-  `(go-loop [msg# (<! ~channel)]
-     (when msg#
-       (try
-         (~handler msg#)
-         (catch Exception e#
-           (µ/log (.getMessage e#))))
-       (recur (<! ~channel)))))
-
-(defmacro go-consume-statebound
+(defn go-consume-statebound
   [state channel handler]
-  `(go-loop [msg# (<! ~channel)]
-     (when (and msg# (:running (deref ~state)))
-       (try
-         (~handler msg#)
-         (catch Exception e#
-           (µ/log (.getMessage e#))))
-       (recur (<! ~channel)))))
+  (go-loop [msg (<! channel)]
+    (when (:running @state)
+      (try
+        (handler msg)
+        (catch Exception e
+          (mu/log (.getMessage e))))
+      (recur (<! channel)))))
 
 ;; Turns [pub-chan {:topic [chan1 chan2 chan3]}]
 ;; into (pub-chan :topic chan1)
@@ -100,7 +89,7 @@
     (list sublist unsublist)))
 
 (defn handler-maps->startstops
-  [state-atom handler-map channel handler]
+  [state-atom handler-map chans-handlers]
   (let [pubbers (mapcat handler-setup-map->list handler-map)]
     (list
      (fn []
@@ -108,26 +97,27 @@
        (doall (map (fn [[pubber topic subber]]
                      (sub pubber topic subber))
                    pubbers))
-       (go-consume-statebound
-        state-atom
-        channel
-        handler))
+       (doall (map (fn [[channel handler]] (go-consume-statebound state-atom channel handler))
+                   chans-handlers)))
      (fn []
        (swap! state-atom dissoc :running)
        (doall (map (fn [[pubber topic subber]]
                      (unsub pubber topic subber))
                    pubbers))))))
 
-
 (defmacro setup-handlers
-  [handler-name state-atom pubsubs channel handler]
+  [handler-name state-atom pubsubs chans-handlers]
   `(let [[starter# stopper#] (handler-maps->startstops
                               ~state-atom
                               ~pubsubs
-                              ~channel
-                              ~handler)]
-     (defstate ~handler-name
+                              ~chans-handlers)]
+     (mount/defstate ~handler-name
        :start (starter#)
        :stop (stopper#))))
 
 (defn mk-chan [] (chan (sliding-buffer 8)))
+
+(defn map-map
+  [f col]
+  (into {} (map (fn [[k v]] [k (f v)]) col)))
+             
