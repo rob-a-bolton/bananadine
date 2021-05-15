@@ -18,20 +18,16 @@
             [bananadine.util :as util]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.connection :refer [conn]]
-            [bananadine.matrix.sync :refer [syncer sync-pub]]
+            [bananadine.matrix.sync :refer [sync-state]]
             [cheshire.core :refer :all]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [com.brunobonacci.mulog :as mu]
             [monger.collection :as mc]
             [monger.operators :refer :all]
             [mount.core :refer [defstate]])
   (:gen-class))
 
-(def event-state (atom {}))
-(def event-chan (util/mk-chan))
-(def event-pub (pub event-chan :msg-type))
-(def sync-chan (util/mk-chan))
+(def event-atom (atom {}))
 
 (def event-collection "events")
 
@@ -68,10 +64,10 @@
       (mu/log {:msg-type :invite
                :channel channel
                :inviter sender})
-      (go (>! event-chan
-              {:msg-type :invite
-               :channel channel
-               :inviter sender})))))
+      (util/run-hooks! event-atom
+                       :invite
+                       {:channel channel
+                        :inviter sender}))))
 
 (defn handle-invite-data
   [[channel data]]
@@ -81,27 +77,36 @@
 (defn handle-leave-event
   [channel]
   (mu/log {:leave-handle channel})
-  (go (>! event-chan
-          {:msg-type :leave
-           :channel channel})))
+  (util/run-hooks! event-atom
+                   :leave
+                   {:channel channel}))
 
 (defn handle-leave-data
-  [[channel data]]
+  [[channel _]]
   (handle-leave-event (name channel)))
 
 (defn handle-room-event
   [channel event]
-  (let [user-id (db/get-user-id)]
-    (when (and (= (:type event) "m.room.message")
-               (not= (:sender event) user-id))
-      (mu/log {:msg-type :msg
-               :sender (:sender event)
-               :msg (util/extract-msg event)})
-      (go (>! event-chan
-              {:msg-type :msg
-               :msg (util/extract-msg event)
-               :channel channel
-               :sender (:sender event)})))))
+  (let [user-id (db/get-user-id)
+        sender (:sender event)
+        msg-type (:type event)]
+    (mu/log :event :type msg-type :sender sender)
+    (when-not (= sender user-id)
+      (case msg-type
+        "m.room.message"
+          (util/run-hooks! event-atom
+                       :room-msg
+                       {:msg (util/extract-msg event)
+                        :channel channel
+                        :sender sender})
+        "m.reaction"
+          (util/run-hooks! event-atom
+                       :msg-reaction
+                       {:relates-to (get-in event [:m.relates_to :event_id])
+                        :reaction (get-in event [:m.relates_to :key])
+                        :channel channel
+                        :sender sender})
+        :unhandled))))
 
 (defn handle-room-data
   [[channel data]]
@@ -121,7 +126,8 @@
 
 (defn handle-syncdata
   [data]
-  (let [syncdata (:data data)
+  (mu/log :evt-sync-handler :data data)
+  (let [syncdata data
         join-events (get-in syncdata [:rooms :join])
         invite-events (get-in syncdata [:rooms :invite])
         leave-events (get-in syncdata [:rooms :leave])
@@ -138,8 +144,16 @@
     (doall (map handle-invite-data invite-events))
     (doall (map handle-leave-data leave-events))))
 
-(util/setup-handlers
- event-handler
- event-state
- [[sync-pub {:sync [sync-chan]}]]
- [[sync-chan handle-syncdata]])
+(defn start-event-state!
+  []
+  (util/add-hook! sync-state :sync {:handler handle-syncdata})
+  event-atom)
+
+(defn stop-event-state!
+  []
+  (util/rm-hook! sync-state :sync handle-syncdata)
+  (reset! event-atom {}))
+
+(defstate event-state
+  :start (start-event-state!)
+  :stop (stop-event-state!))

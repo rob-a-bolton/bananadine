@@ -21,35 +21,39 @@
             [cheshire.core :refer :all]
             [clj-http.client :as client]
             [clojure.core.async :refer [pub chan >! >!! <! <!! go]]
-            [com.brunobonacci.mulog :as µ]
+            [com.brunobonacci.mulog :as mu]
             [mount.core :refer [defstate]])
   (:gen-class))
 
+(def sync-atom (atom {}))
 
-(declare start-syncer! stop-syncer!)
+(defn sync-handler
+  [sync-res]
+  (try
+    (util/run-hooks! sync-atom :sync sync-res)
+    (catch Exception e
+      (mu/log :exception :err (.getMessage e)))))
 
-(defstate syncer
-  :start (start-syncer!)
-  :stop (stop-syncer!))
-
-(def sync-state (atom {}))
-(def sync-chan (util/mk-chan))
-(def sync-pub (pub sync-chan :msg-type))
-
-(defn start-syncer!
+(defn sync-loop
   []
-  (swap! sync-state assoc :running true)
-  (future
-    (loop [sync-res (api/sync!)]
-      (µ/log {:sync-loop sync-res})
-      (when (:running @sync-state)
-        (>!! sync-chan {:msg-type :sync
-                        :data sync-res})
-        (recur (api/sync!)))))
-  sync-state)
+  (loop [sync-res (api/sync!)]
+    (mu/log {:sync-loop sync-res})
+    (when (:running @sync-atom)
+      (mu/log (sync-handler sync-res))
+      (recur (api/sync!)))))
 
-
-(defn stop-syncer!
+(defn start-sync-state!
   []
-  (swap! sync-state dissoc :running)
-  sync-state)
+  (swap! sync-atom assoc :running true)
+  (future (sync-loop))
+  sync-atom)
+
+
+(defn stop-sync-state!
+  []
+  (reset! sync-atom {})
+  sync-atom)
+
+(defstate sync-state
+  :start (start-sync-state!)
+  :stop (stop-sync-state!))

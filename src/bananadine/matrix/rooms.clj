@@ -18,8 +18,7 @@
   (:require [bananadine.db :as db]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.connection :refer [conn]]
-            [bananadine.matrix.events :refer [event-pub event-handler]]
-            [bananadine.matrix.sync :refer [sync-pub]]
+            [bananadine.matrix.events :refer [event-state]]
             [bananadine.util :as util]
             [cheshire.core :refer :all]
             [clj-http.client :as client]
@@ -32,6 +31,8 @@
             [mount.core :refer [defstate]])
   (:gen-class))
 
+
+(def room-atom (atom {}))
 
 (def room-collection "rooms")
 
@@ -64,23 +65,16 @@
    (let [ks (if (seqable? ks) ks [ks])]
      (get-in (get-room room-id) ks))))
 
-(def room-state (atom {}))
-
-(def invite-chan (util/mk-chan))
-(def leave-chan (util/mk-chan))
-
-(def room-chan (util/mk-chan))
-(def join-pub (pub room-chan :joined))
-(def left-pub (pub room-chan :left))
-
-
 (defn join-room-and-publish
   [room-id inviter]
   (µ/log {:joining room-id})
   (let [res (api/join-room room-id)]
     (join-room room-id :data {:invited-by inviter})
-    (go (>! room-chan {:joined room-id
-                       :inviter inviter}))))
+    (util/run-hooks! room-atom
+                     :joined
+                     {:room-id room-id
+                      :inviter inviter
+                      :res res})))
 
 (defn handle-invite
   [event]
@@ -92,17 +86,27 @@
   [room-id]
   (µ/log {:left room-id})
   (leave-room room-id)
-  (go (>! room-chan {:left room-id})))
+  (util/run-hooks! room-atom
+                   :left
+                   {:room-id room-id}))
 
 (defn handle-leave
   [event]
   (µ/log {:leave event})
   (leave-room-and-publish (:channel event)))
 
-(util/setup-handlers
- room-handler
- room-state
- [[event-pub {:invite [invite-chan]
-              :leave [leave-chan]}]]
- [[invite-chan handle-invite]
-  [leave-chan handle-leave]])
+(defn start-room-state!
+  []
+  (util/add-hook! event-state :invite {:handler handle-invite})
+  (util/add-hook! event-state :leave {:handler handle-leave})
+  room-atom)
+
+(defn stop-room-state!
+  []
+  (util/rm-hook! event-state :invite handle-invite)
+  (util/rm-hook! event-state :leave handle-leave)
+  (reset! room-atom {}))
+
+(defstate room-state
+  :start (start-room-state!)
+  :stop (stop-room-state!))

@@ -15,36 +15,33 @@
 
 
 (ns bananadine.matrix.sites.twitter
-  (:require [mount.core :refer [defstate start]]
+  (:require [mount.core :refer [defstate]]
             [bananadine.db :as db]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-pub]]
+            [bananadine.matrix.urls :refer [url-state host-matcher]]
             [bananadine.util :as util]
-            [net.cgrand.enlive-html :as en]
-            [clojure.java.io :refer [as-url]]
-            [clojure.string :refer [join split]]
+            [clojure.string :as str]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
-            [com.brunobonacci.mulog :as µ])
+            [com.brunobonacci.mulog :as mu]
+            [omniconf.core :as cfg])
   (:gen-class))
 
-(def twitter-state (atom {}))
-(def twitter-chan (util/mk-chan))
+(def twitter-atom (atom {}))
 
 (defn twitter-key
   []
-  (db/get-in-act :twitterkey))
+  (cfg/get :twitterkey))
 
 (defn get-tweet-data
   [url]
-  (µ/log {:try-url url})
-  (let [post-id (last (split (.getPath url) #"/"))
+  (mu/log {:try-url url})
+  (let [post-id (last (str/split (.getPath url) #"/"))
         api-url "https://api.twitter.com/1.1/statuses/show.json"
         page (:body (client/get api-url
                                 {:as :json
                                  :query-params {:id post-id}
                                  :oauth-token (twitter-key)}))]
-    (µ/log {:page page})
+    (mu/log {:page page})
     [:p
      (:text page)
      [:br]
@@ -52,14 +49,23 @@
 
 (defn handle-link
   [event]
-  (let [{:keys [channel sender host url]} event
+  (let [{:keys [channel url]} event
         tweet-data (get-tweet-data url)]
-    (µ/log tweet-data)
+    (mu/log tweet-data)
     (api/msg-room! channel tweet-data)))
 
-(util/setup-handlers
- twitter-handler
- twitter-state
- [[url-pub {"twitter.com" [twitter-chan]
-            "mobile.twitter.com" [twitter-chan]}]]
- [[twitter-chan handle-link]])
+(defn start-twitter-state!
+  []
+  (util/add-hook! url-state
+                  :url
+                  {:handler handle-link
+                   :matcher (host-matcher ["twitter.com"])}))
+
+(defn stop-twitter-state!
+  []
+  (util/rm-hook! url-state :url handle-link)
+  (reset! twitter-atom {}))
+
+(defstate twitter-state
+  :start (start-twitter-state!)
+  :stop (stop-twitter-state!))

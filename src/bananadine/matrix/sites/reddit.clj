@@ -15,21 +15,16 @@
 
 
 (ns bananadine.matrix.sites.reddit
-  (:require [mount.core :refer [defstate start]]
+  (:require [mount.core :refer [defstate]]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-pub]]
+            [bananadine.matrix.urls :refer [url-state host-matcher]]
             [bananadine.util :as util]
-            [cheshire.core :refer :all]
-            [clojure.java.io :refer [as-url]]
-            [clojure.string :refer [join split]]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [net.cgrand.enlive-html :as en]
-            [com.brunobonacci.mulog :as µ])
+            [com.brunobonacci.mulog :as mu])
   (:gen-class))
 
-(def reddit-state (atom {}))
-(def reddit-chan (util/mk-chan))
+(def reddit-atom (atom {}))
 
 (defn parse-post
   [post-elem]
@@ -74,15 +69,24 @@
 
 (defn handle-link
   [event]
-  (µ/log {:reddit event})
-  (let [{:keys [channel sender host url]} event        
+  (mu/log {:reddit event})
+  (let [{:keys [channel url]} event
         post-path (.getPath url)
         post-info (get-post-info post-path)]
     (api/msg-room! channel post-info)))
 
-(util/setup-handlers
- reddit-handler
- reddit-state
- [[url-pub {"reddit.com" [reddit-chan]
-            "www.reddit.com" [reddit-chan]}]]
- [[reddit-chan handle-link]])
+(defn start-reddit-state!
+  []
+  (util/add-hook! url-state
+                  :url
+                  {:handler handle-link
+                   :matcher (host-matcher ["reddit.com"])}))
+
+(defn stop-reddit-state!
+  []
+  (util/rm-hook! url-state :url handle-link)
+  (reset! reddit-atom {}))
+
+(defstate reddit-state
+  :start (start-reddit-state!)
+  :stop (stop-reddit-state!))

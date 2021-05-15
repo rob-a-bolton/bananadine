@@ -17,28 +17,28 @@
 (ns bananadine.bootstrap
   (:require [bananadine.db :refer [dbcon]]
             [bananadine.matrix.connection :refer [conn]]
-            [bananadine.matrix.events :refer [event-handler]]
-            [bananadine.matrix.mentions :refer [mention-handler]]
-            [bananadine.matrix.rooms :refer [room-handler]]
-            [bananadine.matrix.sites.generic :refer [generic-handler]]
-            [bananadine.matrix.sites.reddit :refer [reddit-handler]]
-            [bananadine.matrix.sites.tanukitunes :refer [tanuki-handler]]
-            [bananadine.matrix.sites.twitter :refer [twitter-handler]]
-            [bananadine.matrix.sites.youtube :refer [youtube-handler]]
-            [bananadine.matrix.sync :refer [syncer]]
-            [bananadine.matrix.urls :refer [url-handler]])
+            [bananadine.matrix.events :refer [event-state]]
+            ;;[bananadine.matrix.mentions :refer [mention-handler]]
+            [bananadine.matrix.rooms :refer [room-state]]
+            [bananadine.matrix.sites.generic :refer [generic-state]]
+            [bananadine.matrix.sites.reddit :refer [reddit-state]]
+            [bananadine.matrix.sites.tanukitunes :refer [tanuki-state]]
+            [bananadine.matrix.sites.twitter :refer [twitter-state]]
+            [bananadine.matrix.sites.youtube :refer [youtube-state]]
+            [bananadine.matrix.sync :refer [sync-state]]
+            [bananadine.matrix.urls :refer [url-state]])
   (:gen-class))
 
 (def default-handlers
   [conn
    dbcon
-   event-handler
-   generic-handler
-   mention-handler
-   reddit-handler
-   room-handler
-   syncer
-   tanuki-handler
-   twitter-handler
-   url-handler
-   youtube-handler])
+   event-state
+   generic-state
+   ;;mention-state
+   reddit-state
+   room-state
+   sync-state
+   tanuki-state
+   twitter-state
+   url-state
+   youtube-state])

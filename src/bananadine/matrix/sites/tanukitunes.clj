@@ -15,25 +15,15 @@
 
 
 (ns bananadine.matrix.sites.tanukitunes
-  (:require [mount.core :refer [defstate start]]
+  (:require [mount.core :refer [defstate]]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-pub]]
+            [bananadine.matrix.urls :refer [url-state host-matcher]]
             [bananadine.util :as util]
-            [clojure.java.io :refer [as-url]]
-            [clojure.string :refer [join]]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
-            [com.brunobonacci.mulog :as µ])
+            [com.brunobonacci.mulog :as mu])
   (:gen-class))
 
-;; (declare start-tanuki-handler stop-tanuki-handler)
-
-;; (defstate tanuki-handler
-;;   :start (start-tanuki-handler)
-;;   :stop (stop-tanuki-handler))
-
-(def tanuki-state (atom {}))
-(def tanuki-chan (util/mk-chan))
+(def tanuki-atom (atom {}))
 
 (defn album-link
   [album]
@@ -55,14 +45,24 @@
 
 (defn handle-link
   [event]
-  (µ/log {:tanuki event})
-  (let [{:keys [channel sender host url]} event
+  (mu/log {:tanuki event})
+  (let [{:keys [channel url]} event
         tanuki-data (get-tanuki-data url)]
-    (µ/log tanuki-data)
+    (mu/log tanuki-data)
     (api/msg-room! channel tanuki-data)))
 
-(util/setup-handlers
- tanuki-handler
- tanuki-state
- [[url-pub {"tanukitunes.com" [tanuki-chan]}]]
- [[tanuki-chan handle-link]])
+(defn start-tanuki-state!
+  []
+  (util/add-hook! url-state
+                  :url
+                  {:handler handle-link
+                   :matcher (host-matcher ["tanukitunes.com"])}))
+
+(defn stop-tanuki-state!
+  []
+  (util/rm-hook! url-state :url handle-link)
+  (reset! tanuki-atom {}))
+
+(defstate tanuki-state
+  :start (start-tanuki-state!)
+  :stop (stop-tanuki-state!))

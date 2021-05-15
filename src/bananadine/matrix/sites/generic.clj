@@ -17,8 +17,7 @@
 (ns bananadine.matrix.sites.generic
   (:require [bananadine.db :as db]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.events :refer [event-handler event-pub]]
-            [bananadine.matrix.urls :refer [urls-pub]]
+            [bananadine.matrix.urls :refer [url-state]]
             [bananadine.util :as util]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [clojure.java.io :refer [as-url]]
@@ -28,8 +27,7 @@
             [net.cgrand.enlive-html :as en])
   (:gen-class))
 
-(def url-state (atom {}))
-(def link-chan (util/mk-chan))
+(def generic-atom (atom {}))
 
 (defn meta-tag-content
   [proptype tag page]
@@ -71,8 +69,16 @@
     (when-not (get (db/get-in-act :nourl-chans) (keyword channel))
       (handle-link channel sender host url))))
 
-(util/setup-handlers
- generic-handler
- url-state
- [[urls-pub {true [link-chan]}]]
- [[link-chan handle-links]])
+(defn start-generic-state!
+  []
+  (util/add-hook! url-state
+                  :url
+                  {:handler handle-links}))
+(defn stop-generic-state!
+  []
+  (util/rm-hook! url-state :url handle-links)
+  (reset! generic-atom {}))
+
+(defstate generic-state
+  :start (start-generic-state!)
+  :stop (stop-generic-state!))

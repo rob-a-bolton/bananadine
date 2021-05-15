@@ -15,42 +15,51 @@
 
 
 (ns bananadine.matrix.urls
-  (:require [mount.core :refer [defstate start]]
+  (:require [mount.core :refer [defstate]]
             [bananadine.util :as util]
+            [bananadine.matrix.events :refer [event-state]]
             [clojure.java.io :refer [as-url]]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
-            [com.brunobonacci.mulog :as µ]
-            [bananadine.matrix.events :refer [event-handler event-pub]])
+            [com.brunobonacci.mulog :as mu])
   (:gen-class))
 
-(declare start-url-handler stop-url-handler)
 
-(def url-state (atom {}))
-
-(def msg-chan (util/mk-chan))
-(def url-chan (util/mk-chan))
-(def urls-chan (util/mk-chan))
-(def url-pub (pub url-chan :host))
-(def urls-pub (pub urls-chan some?)) ; Publishes all urls
+(def url-atom (atom {}))
 
 (defn publish-url
   [url event]
-  (µ/log {:actual-event event})
+  (mu/log {:actual-event event})
   (let [out-evt (merge event {:host (.getHost url)
                               :url url})]
-    (µ/log {:host (.getHost url) :url url})
-    (go (>! url-chan out-evt)
-        (>! urls-chan out-evt))))
+    (mu/log {:host (.getHost url) :url url})
+    (util/run-hooks! url-atom
+                     :url
+                     out-evt)))
 
 (defn extract-urls
   [event]
   (let [urls (map as-url (re-seq #"http[s]?://[^/]+/[^ ]*"
                                  (get-in event [:msg :plain])))]
-    (µ/log {:urls urls})
+    (mu/log {:urls urls})
     (doall (map #(publish-url %1 event) urls))))
 
-(util/setup-handlers
- url-handler
- url-state
- [[event-pub {:msg [msg-chan]}]]
- [[msg-chan extract-urls]])
+(defn host-matcher
+  [hosts]
+  (let [host-set (set hosts)]
+    (fn [event] (contains? host-set (:host event)))))
+
+(defn start-url-state!
+  []
+  (util/add-hook! event-state
+                  :room-msg
+                  {:handler extract-urls})
+  url-atom)
+
+(defn stop-url-state!
+  []
+  (util/rm-hook! event-state :room-msg extract-urls)
+  (reset! url-atom {}))
+
+(defstate url-state
+  :start (start-url-state!)
+  :stop (stop-url-state!))

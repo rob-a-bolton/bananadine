@@ -120,4 +120,44 @@
 (defn map-map
   [f col]
   (into {} (map (fn [[k v]] [k (f v)]) col)))
-             
+
+(defn cmp-handler
+  [handler]
+  (comp (partial = handler) :handler))
+
+(defn contains-hook?
+  [state evt handler]
+  (some (cmp-handler handler)
+        (get-in @state [:hooks evt])))
+
+(defn add-hook!
+  [state evt hook]
+  (when-not (contains-hook? state evt (:handler hook))
+    (let [new-evt-hooks (cons hook (get-in @state [:hooks evt]))]
+      (swap! state assoc-in [:hooks evt] new-evt-hooks))))
+
+(defn rm-hook!
+  [state evt handler]
+  (when (contains-hook? state evt handler)
+    (let [new-evt-hooks (filter (complement (cmp-handler handler))
+                                (get-in @state [:hooks evt]))]
+      (swap! state assoc-in [:hooks evt] new-evt-hooks))))
+
+(defn filter-hooks
+  [hooks data]
+  (filter (fn [{:keys [matcher]}]
+            (if matcher (matcher data) true)) hooks))
+
+(defn run-hook!
+  [handler data]
+  (try
+    (handler data)
+    (catch Exception e (mu/log :exception
+                               :err (.getMessage e)
+                               :handler handler
+                               :data data))))
+
+(defn run-hooks!
+  [state evt data]
+  (let [hooks (filter-hooks (get-in @state [:hooks evt]) data)]
+    (doall (map #(run-hook! (:handler %) data) hooks))))

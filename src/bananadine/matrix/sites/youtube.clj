@@ -15,21 +15,19 @@
 
 
 (ns bananadine.matrix.sites.youtube
-  (:require [mount.core :refer [defstate start]]
+  (:require [mount.core :refer [defstate]]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-pub]]
+            [bananadine.matrix.urls :refer [url-state host-matcher]]
             [bananadine.util :as util]
-            [cheshire.core :refer :all]
-            [clojure.java.io :refer [as-url]]
-            [clojure.string :refer [join split]]
+            [cheshire.core :refer [parse-string]]
+            [clojure.string :as str]
             [clj-http.client :as client]
-            [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [ring.util.codec :as rc]
-            [com.brunobonacci.mulog :as µ])
+            [com.brunobonacci.mulog :as mu])
   (:gen-class))
 
-(def youtube-state (atom {}))
-(def youtube-chan (util/mk-chan))
+
+(def youtube-atom (atom {}))
 
 (defn to-stars
   [rating]
@@ -37,7 +35,7 @@
         num-empty (- 5 num-full)
         full-stars (repeat num-full "★")
         empty-stars (repeat num-empty "☆")]
-    (join "" (concat full-stars empty-stars))))
+    (str/join "" (concat full-stars empty-stars))))
   
 (defn get-vid-info
   [vid-id]
@@ -65,16 +63,26 @@
 
 (defn handle-link
   [event]
-  (µ/log {:youtube event})
-  (let [{:keys [channel sender host url]} event
+  (mu/log {:youtube event})
+  (let [{:keys [channel url]} event
         vid-id (get (util/decode-query-params (.getQuery url))
                     "v")
         vid-info (get-vid-info vid-id)]
     (api/msg-room! channel vid-info)))        
 
-(util/setup-handlers
- youtube-handler
- youtube-state
- [[url-pub {"youtube.com" [youtube-chan]
-            "www.youtube.com" [youtube-chan]}]]
- [[youtube-chan handle-link]])
+(defn start-youtube-state!
+  []
+  (util/add-hook! url-state
+                  :url
+                  {:handler handle-link
+                   :matcher (host-matcher ["youtube.com"
+                                           "www.youtube.com"
+                                           "youtu.be"])}))
+(defn stop-youtube-state!
+  []
+  (util/rm-hook! url-state :url handle-link)
+  (reset! youtube-atom {}))
+
+(defstate youtube-state
+  :start (start-youtube-state!)
+  :stop (stop-youtube-state!))
