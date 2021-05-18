@@ -17,7 +17,7 @@
 (ns bananadine.matrix.sites.youtube
   (:require [mount.core :refer [defstate]]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-state host-matcher]]
+            [bananadine.matrix.urls :refer [url-state polite-host-matcher]]
             [bananadine.util :as util]
             [cheshire.core :refer [parse-string]]
             [clojure.string :as str]
@@ -75,9 +75,12 @@
   (util/add-hook! url-state
                   :url
                   {:handler handle-link
-                   :matcher (host-matcher ["youtube.com"
-                                           "www.youtube.com"
-                                           "youtu.be"])}))
+                   :matcher (polite-host-matcher
+                             "youtube"
+                             ["youtube.com"
+                              "www.youtube.com"
+                              "youtu.be"])}))
+
 (defn stop-youtube-state!
   []
   (util/rm-hook! url-state :url handle-link)

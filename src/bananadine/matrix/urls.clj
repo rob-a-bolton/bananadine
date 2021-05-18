@@ -18,6 +18,7 @@
   (:require [mount.core :refer [defstate]]
             [bananadine.util :as util]
             [bananadine.matrix.events :refer [event-state]]
+            [bananadine.matrix.rooms :as rooms]
             [clojure.java.io :refer [as-url]]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [com.brunobonacci.mulog :as mu])
@@ -47,6 +48,19 @@
   [hosts]
   (let [host-set (set hosts)]
     (fn [event] (contains? host-set (:host event)))))
+
+(defn host-muted-for-channel?
+  [channel mute-key]
+  (let [mutes (set (rooms/get-room channel :mutes))]
+    (contains? mutes mute-key)))
+
+(defn polite-host-matcher
+  [mute-key hosts]
+  (let [h-matcher (host-matcher hosts)]
+    (fn [event]
+      (and (h-matcher event)
+           (not (host-muted-for-channel? (:channel event)
+                                         mute-key))))))
 
 (defn start-url-state!
   []

@@ -18,6 +18,7 @@
   (:require [bananadine.db :as db]
             [bananadine.matrix.api :as api]
             [bananadine.matrix.urls :refer [url-state]]
+            [bananadine.matrix.rooms :as rooms]
             [bananadine.util :as util]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
             [clojure.java.io :refer [as-url]]
@@ -65,8 +66,9 @@
 
 (defn handle-links
   [event]
-  (let [{:keys [channel sender host url]} event]
-    (when-not (get (db/get-in-act :nourl-chans) (keyword channel))
+  (let [{:keys [channel sender host url]} event
+        muted? (rooms/get-room channel :no-generic)]
+    (when-not muted?
       (handle-link channel sender host url))))
 
 (defn start-generic-state!
