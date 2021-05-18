@@ -15,13 +15,16 @@
 
 
 (ns bananadine.matrix.urls
-  (:require [mount.core :refer [defstate]]
+  (:require [bananadine.db :as db]
             [bananadine.util :as util]
             [bananadine.matrix.events :refer [event-state]]
             [bananadine.matrix.rooms :as rooms]
             [clojure.java.io :refer [as-url]]
             [clojure.core.async :refer [pub sub unsub chan >! >!! <! <!! go]]
-            [com.brunobonacci.mulog :as mu])
+            [com.brunobonacci.mulog :as mu]
+            [monger.collection :as mc]
+            [monger.operators :refer :all]
+            [mount.core :refer [defstate]])
   (:gen-class))
 
 
@@ -61,6 +64,34 @@
       (and (h-matcher event)
            (not (host-muted-for-channel? (:channel event)
                                          mute-key))))))
+
+(defn mute-channel-generic
+  [channel]
+  (mc/update (:dbd db/dbcon)
+             rooms/room-collection
+             {:id channel}
+             {$set {:no-generic true}}))
+
+(defn unmute-channel-generic
+  [channel]
+  (mc/update (:dbd db/dbcon)
+             rooms/room-collection
+             {:id channel}
+             {$unset {:no-generic true}}))
+
+(defn mute-channel-flag
+  [channel flag]
+  (mc/update (:dbd db/dbcon)
+             rooms/room-collection
+             {:id channel}
+             {$push {:mutes flag}}))
+
+(defn unmute-channel-flag
+  [channel flag]
+  (mc/update (:dbd db/dbcon)
+             rooms/room-collection
+             {:id channel}
+             {$pull {:mutes flag}}))
 
 (defn start-url-state!
   []
