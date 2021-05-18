@@ -53,18 +53,18 @@
 
 (defn try-register-user
   [options]
-  (let [{:keys [host user pass]} options]
-    (if (and host user pass)
-      (do (api/register! host user pass)
-          (print-and-exit (format "Registered %s on %s" user host)))
+  (let [{:keys [host username password]} options]
+    (if (and host username password)
+      (do (api/register! host username password)
+          (print-and-exit (format "Registered %s on %s" username host)))
       (error-and-exit "Host, username, and password must be supplied to register"))))
 
 (defn try-update-user
   [options]
-  (let [{:keys [host user pass]} options]
-    (when-not (and host user pass)
+  (let [{:keys [host username password]} options]
+    (when-not (and host username password)
       (error-and-exit "Need to provide host, username and password to update."))
-    (db/set-in-act! host user :pass pass)
+    (db/set-in-act! host username :pass password)
     (error-and-exit "Updated")))
 
 (defn print-help

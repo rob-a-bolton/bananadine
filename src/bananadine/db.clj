@@ -124,7 +124,8 @@
      (mc/update (:dbd dbcon)
                 act-doc
                 {:host host :user user}
-                {$set {dotty-ks v}})))
+                {$set {dotty-ks v}}
+                {:upsert true})))
   ([ks v]
    (set-in-act! (cfg/get :host) (cfg/get :user) ks v)))
 
