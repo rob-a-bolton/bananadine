@@ -36,11 +36,13 @@
 (defn parse-as-cmd
   [s]
   (when (is-cmd? s)
-    (let [parts (str/split (.substring s (.length (cmd-str))) #" +")]
+    (let [parts (str/split (.substring s (.length (cmd-str))) #" +")
+          argstr (.substring s (+ (.length (cmd-str))
+                                  (.length (first parts))))]
       {:cmd (keyword (first parts))
        :args (rest parts)
-       :argstr (.substring s (+ (.length (cmd-str))
-                                (.length (first parts))))})))
+       :comma-args (map str/trim (str/split argstr #"[,.;]"))
+       :argstr argstr})))
 
 (defn extract-cmd
   [event]
