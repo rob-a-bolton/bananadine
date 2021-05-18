@@ -16,9 +16,10 @@
 
 (ns bananadine.bootstrap
   (:require [bananadine.db :refer [dbcon]]
+            [bananadine.commands :refer [command-state]]
+            [bananadine.commands.cotd :refer [cotd-state]]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.events :refer [event-state]]
-            ;;[bananadine.matrix.mentions :refer [mention-handler]]
             [bananadine.matrix.rooms :refer [room-state]]
             [bananadine.matrix.sites.generic :refer [generic-state]]
             [bananadine.matrix.sites.reddit :refer [reddit-state]]
@@ -32,9 +33,10 @@
 (def default-handlers
   [conn
    dbcon
+   command-state
+   cotd-state
    event-state
    generic-state
-   ;;mention-state
    reddit-state
    room-state
    sync-state
