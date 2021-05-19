@@ -17,7 +17,7 @@
 (ns bananadine.matrix.sites.tanukitunes
   (:require [mount.core :refer [defstate]]
             [bananadine.matrix.api :as api]
-            [bananadine.matrix.urls :refer [url-state host-matcher]]
+            [bananadine.matrix.urls :refer [url-state polite-host-matcher]]
             [bananadine.util :as util]
             [clj-http.client :as client]
             [com.brunobonacci.mulog :as mu])
@@ -56,7 +56,9 @@
   (util/add-hook! url-state
                   :url
                   {:handler handle-link
-                   :matcher (host-matcher ["tanukitunes.com"])}))
+                   :matcher (polite-host-matcher
+                             "tanuki"
+                             ["tanukitunes.com"])}))
 
 (defn stop-tanuki-state!
   []
