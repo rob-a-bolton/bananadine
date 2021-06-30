@@ -64,7 +64,7 @@
 
 (defn stop-cotd-state!
   []
-  (util/rm-hook! command-state :room-msg handle-cotd)
+  (util/rm-hook! command-state :cotd handle-cotd)
   (reset! cotd-atom {}))
 
 (defstate cotd-state
