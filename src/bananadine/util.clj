@@ -161,3 +161,9 @@
   [state evt data]
   (let [hooks (filter-hooks (get-in @state [:hooks evt]) data)]
     (doall (map #(run-hook! (:handler %) data) hooks))))
+
+(defn maybe-int
+  [s]
+  (try
+    (Integer/parseInt s)
+    (catch NumberFormatException _ nil)))
