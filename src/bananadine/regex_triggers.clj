@@ -248,9 +248,9 @@
 (defn handle-regex-cmd
   [{:keys [args channel]}]
   (cond
-    (and (= (count args) 3)
+    (and (> (count args) 2)
          (= (first args) "create"))
-      (handle-create-cmd channel (second args) (nth args 2))
+      (handle-create-cmd channel (second args) (str/join " " (drop 2 args)))
     (and (= (count args) 1)
          (= (first args) "list"))
       (handle-list-cmd channel)
