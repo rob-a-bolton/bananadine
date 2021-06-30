@@ -63,6 +63,14 @@
     (swap! regex-trigger-atom assoc-in [:regexes name] new-obj)
     (db-upsert-regex-trigger name new-obj)))
 
+(defn set-regex-trigger
+  [name regex]
+  (let [current-obj (get-in @regex-trigger-atom
+                            [:regexes name])
+        new-obj (assoc current-obj :regex regex)]
+    (swap! regex-trigger-atom assoc-in [:regexes name] new-obj)
+    (db-upsert-regex-trigger name new-obj)))
+
 (defn rm-regex-trigger
   [name]
   (let [new-regexes (dissoc (:regexes @regex-trigger-atom) name)]
@@ -96,11 +104,6 @@
   (filter (fn [[_ v]] (re-matches (re-pattern (:regex v)) s))
           (:regexes @regex-trigger-atom)))
 
-;;
-
-
-;; parse command via html to extract code and blockquote
-
 (def rx-resp-groups #"\{([^}]+)\}")
 
 (defn mk-resp-replacer
@@ -116,15 +119,6 @@
       (.group m (if-let [i (util/maybe-int k)] i k))
       (catch IllegalArgumentException _ nil))))
 
-;; (defn run-regex
-;;   [pattern response s]
-;;   (let [m (re-matcher regex s)
-;;         mget (mk-mget m)
-;;         resp-replacer (mk-resp-replacer mget)
-;;         resp (rand-nth resps)]
-;;     (when (>= (rand) (- 1 (or prob 1.0)))
-;;       (str/replace ))
-;;     (map #(str/replace resps % resp-replacer) resps)))
 (defn run-regex
   [regex s resps prob]
   (let [m (re-matcher regex s)
@@ -147,12 +141,17 @@
     (when (seq responses)
       (api/msg-room! channel (str/join "\n" responses)))))
 
+(defn warn-regex-no-exist
+  [channel rx-name]
+  (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"]))
+
 (defn print-help
   [channel]
   (api/msg-room! channel
    [:p
     [:strong "regex create "] [:em "name regex"] ": Create a named regex" [:br]
     [:strong "regex list"] ": Lists the named regexes" [:br]
+    [:strong "regex set "] [:em "name regex"] ": Change a named regex" [:br]
     [:strong "regex rm! "] [:em "name"] ": Delete a named regex" [:br]
     [:strong "regex resp "] [:em "name"] ": Show the responses for a regex" [:br]
     [:strong "regex resp add "] [:em "name response"] ": Add a response to a regex" [:br]
@@ -177,6 +176,14 @@
                            (apply concat))])
       (api/msg-room! channel "No regexes created yet"))))
 
+(defn handle-set-cmd
+  [channel rx-name regex]
+  (let [obj (get-in @regex-trigger-atom [:regexes rx-name])]
+    (if obj
+      (do (set-regex-trigger rx-name regex)
+          (api/msg-room! channel [:p "Updated regex " [:strong rx-name] " to " regex]))
+      (warn-regex-no-exist channel rx-name))))
+
 (defn handle-rm-cmd
   [channel rx-name]
   (rm-regex-trigger rx-name)
@@ -194,7 +201,7 @@
         responses (:resps obj)]
     (cond
       (nil? obj)
-        (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"])
+        (warn-regex-no-exist channel rx-name)
       ((complement seq) responses)
         (api/msg-room! channel [:p "Regex " [:strong rx-name] " has no responses"])
       :else
@@ -208,7 +215,7 @@
   (if (get-in @regex-trigger-atom [:regexes rx-name])
     (do (add-regex-trigger-resp rx-name resp)
         (api/msg-room! channel [:p "Added response " [:em resp] " to regex " [:strong rx-name]]))
-    (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"])))
+    (warn-regex-no-exist channel rx-name)))
 
 (defn handle-resp-rm-cmd
   [channel rx-name index]
@@ -218,7 +225,7 @@
         num-resps (count resps)]
     (cond
       (nil? obj)
-        (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"])
+        (warn-regex-no-exist channel rx-name)
       (<= num-resps index)
         (api/msg-room! channel [:p "Regex " [:strong rx-name] " only has " (str num-resps) " responses"])
       :else
@@ -243,7 +250,7 @@
                                   (str current-chance)
                                   " to "
                                   (str chance)]))
-      (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"]))))
+      (warn-regex-no-exist channel rx-name))))
 
 (defn handle-regex-cmd
   [{:keys [args channel]}]
@@ -254,9 +261,12 @@
     (and (= (count args) 1)
          (= (first args) "list"))
       (handle-list-cmd channel)
+    (and (> (count args) 2)
+         (= (first args) "set"))
+      (handle-set-cmd channel (second args) (str/join " " (drop 2 args)))
     (and (= (count args) 2)
          (= (first args) "rm!"))
-      (handle-rm-cmd channel (second args) )
+      (handle-rm-cmd channel (second args))
     (and (= (count args) 2)
          (= (first args) "resp"))
       (handle-resp-print-cmd channel (second args))
