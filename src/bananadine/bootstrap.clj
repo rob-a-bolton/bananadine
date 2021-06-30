@@ -18,6 +18,7 @@
   (:require [bananadine.db :refer [dbcon]]
             [bananadine.commands :refer [command-state]]
             [bananadine.commands.cotd :refer [cotd-state]]
+            [bananadine.commands.random :refer [random-state]]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.events :refer [event-state]]
             [bananadine.matrix.rooms :refer [room-state]]
@@ -38,6 +39,7 @@
    cotd-state
    event-state
    generic-state
+   random-state
    reddit-state
    regex-trigger-state
    room-state
