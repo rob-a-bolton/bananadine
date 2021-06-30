@@ -27,7 +27,8 @@
             [bananadine.matrix.sites.twitter :refer [twitter-state]]
             [bananadine.matrix.sites.youtube :refer [youtube-state]]
             [bananadine.matrix.sync :refer [sync-state]]
-            [bananadine.matrix.urls :refer [url-state]])
+            [bananadine.matrix.urls :refer [url-state]]
+            [bananadine.regex-triggers :refer [regex-trigger-state]])
   (:gen-class))
 
 (def default-handlers
@@ -38,6 +39,7 @@
    event-state
    generic-state
    reddit-state
+   regex-trigger-state
    room-state
    sync-state
    tanuki-state
