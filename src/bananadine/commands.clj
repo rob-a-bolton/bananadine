@@ -40,8 +40,9 @@
 
 (defn as-cmd
   [s]
-  (let [[cmd s] (str/split s #" " 2)]
-    [(subs cmd (count (cmd-str))) (or s "")]))
+  (when (is-cmd? s)
+    (let [[cmd s] (str/split s #" " 2)]
+      [(subs cmd (count (cmd-str))) (or s "")])))
 
 (defn match-cmd
   [cmd-str cmd-def]
