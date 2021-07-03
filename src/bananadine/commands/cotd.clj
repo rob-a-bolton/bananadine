@@ -17,7 +17,7 @@
 (ns bananadine.commands.cotd
   (:require [bananadine.matrix.api :as api]
             [bananadine.db :as db]
-            [bananadine.commands :refer [command-state]]
+            [bananadine.commands :refer [command-state register-cmd! unregister-cmd!]]
             [bananadine.util :as util]
             [clj-http.client :as client]
             [clojure.string :as str]
@@ -49,22 +49,24 @@
      :desc cheese-desc}))
 
 (defn handle-cotd
-  [event]
-  (let [{:keys [channel sender]} event
-        {:keys [name desc]} (get-cotd)]
+  [channel]
+  (let [{:keys [name desc]} (get-cotd)]
     (api/msg-room! channel
       [:p [:h1 name] [:p desc]])))
 
+(def cotd-cmd-def
+  {:name "cotd"
+   :desc "Cheese of the day module"
+   :cmds [{:cmd "" :args [] :desc "Gets the cheese of the day" :handler handle-cotd}]})
+
 (defn start-cotd-state!
   []
-  (util/add-hook! command-state
-                  :cotd
-                  {:handler handle-cotd})
+  (register-cmd! cotd-cmd-def)
   cotd-atom)
 
 (defn stop-cotd-state!
   []
-  (util/rm-hook! command-state :cotd handle-cotd)
+  (unregister-cmd! cotd-cmd-def)
   (reset! cotd-atom {}))
 
 (defstate cotd-state

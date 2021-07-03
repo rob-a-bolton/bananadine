@@ -94,11 +94,12 @@
     (when-not (= sender user-id)
       (case msg-type
         "m.room.message"
-          (util/run-hooks! event-atom
-                       :room-msg
-                       {:msg (util/extract-msg event)
-                        :channel channel
-                        :sender sender})
+          (let [msg (util/extract-msg event)]
+            (util/run-hooks! event-atom
+                             (:msgtype msg)
+                             {:msg msg
+                              :channel channel
+                              :sender sender}))
         "m.reaction"
           (util/run-hooks! event-atom
                        :msg-reaction

@@ -14,7 +14,7 @@
 ;; along with Bananadine.  If not, see <https://www.gnu.org/licenses/>.
 
 (ns bananadine.regex-triggers
-  (:require [bananadine.commands :refer [command-state]]
+  (:require [bananadine.commands :refer [command-state register-cmd! unregister-cmd!]]
             [bananadine.db :as db]
             [bananadine.util :as util]
             [bananadine.matrix.api :as api]
@@ -252,50 +252,57 @@
                                   (str chance)]))
       (warn-regex-no-exist channel rx-name))))
 
-(defn handle-regex-cmd
-  [{:keys [args channel]}]
-  (cond
-    (and (> (count args) 2)
-         (= (first args) "create"))
-      (handle-create-cmd channel (second args) (str/join " " (drop 2 args)))
-    (and (= (count args) 1)
-         (= (first args) "list"))
-      (handle-list-cmd channel)
-    (and (> (count args) 2)
-         (= (first args) "set"))
-      (handle-set-cmd channel (second args) (str/join " " (drop 2 args)))
-    (and (= (count args) 2)
-         (= (first args) "rm!"))
-      (handle-rm-cmd channel (second args))
-    (and (= (count args) 2)
-         (= (first args) "resp"))
-      (handle-resp-print-cmd channel (second args))
-    (and (> (count args) 3)
-         (= (take 2 args) ["resp" "add"]))
-      (handle-resp-add-cmd channel (nth args 2) (str/join " " (drop 3 args)))
-    (and (= (count args) 4)
-         (= (take 2 args) ["resp" "rm"]))
-      (handle-resp-rm-cmd  channel (nth args 2) (Integer/parseInt (nth args 3)))
-    (and (= (count args) 2)
-         (= (first args) "chance"))
-      (handle-resp-show-chance-cmd channel (second args))
-    (and (= (count args) 3)
-         (= (first args) "chance"))
-      (handle-resp-set-chance-cmd channel (second args) (Float/parseFloat (nth args 2)))
-    :else
-      (print-help channel)))
+(def regex-cmd-def
+  {:name "regex"
+   :desc "Manage named regex triggers and responses"
+   :cmds [{:cmd "create"
+           :desc "Create a named regex. Name a capture group via (?<foo>)"
+           :handler handle-create-cmd
+           :args [{:name :name} {:name :regex}]}
+          {:cmd "set"
+           :desc "Change a named regex"
+           :handler handle-set-cmd
+           :args [{:name :name} {:name :regex}]}
+          {:cmd "rm!"
+           :desc "Delete a named regex"
+           :handler handle-rm-cmd
+           :args [{:name :name}]}
+          {:cmd "list"
+           :desc "List the named regexes"
+           :handler handle-list-cmd
+           :args []}
+          {:cmd "resp"
+           :desc "Show the responses for a regex"
+           :handler handle-resp-print-cmd
+           :args [{:name :name}]}
+          {:cmd "resp add"
+           :desc "Add a response to a regex. {1}, {2}, {foo} etc for capture groups"
+           :handler handle-resp-add-cmd
+           :args [{:name :name} {:name :resp}]}
+          {:cmd "resp rm"
+           :desc "Delete a response from a regex by index"
+           :handler handle-resp-rm-cmd
+           :args [{:name :name}]}
+          {:cmd "chance"
+           :desc "Show the chance of triggering a regex"
+           :handler handle-resp-show-chance-cmd
+           :args [{:name :name}]}
+          {:cmd "chance set"
+           :desc "Set the chance of triggering a regex"
+           :handler handle-resp-set-chance-cmd
+           :args [{:name :name} {:name :chance :converter #(Float/parseFloat %)}]}]})
 
 (defn start-regex-trigger-state!
   []
   (reset! regex-trigger-atom {:regexes (get-regexes-from-db)})
-  (util/add-hook! event-state :room-msg {:handler handle-regex-triggers})
-  (util/add-hook! command-state :regex {:handler handle-regex-cmd})
+  (util/add-hook! event-state :m.text {:handler handle-regex-triggers})
+  (register-cmd! regex-cmd-def)
   regex-trigger-atom)
 
 (defn stop-regex-trigger-state!
   []
-  (util/rm-hook! event-state :room-msg handle-regex-triggers)
-  (util/rm-hook! command-state :regex handle-regex-cmd)
+  (util/rm-hook! event-state :m.text handle-regex-triggers)
+  (unregister-cmd! regex-cmd-def)
   (reset! regex-trigger-atom {}))
 
 (defstate regex-trigger-state

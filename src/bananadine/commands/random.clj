@@ -16,7 +16,7 @@
 (ns bananadine.commands.random
   (:require [bananadine.matrix.api :as api]
             [bananadine.db :as db]
-            [bananadine.commands :refer [command-state]]
+            [bananadine.commands :refer [command-state register-cmd! unregister-cmd!]]
             [bananadine.util :as util]
             [clj-http.client :as client]
             [clojure.string :as str]
@@ -25,12 +25,6 @@
 
 
 (def random-atom (atom {}))
-
-(defn choose-handler
-  "Given a selection of items as choices, pick a random item"
-  [event]
-  (when-let [choice (rand-nth (:comma-args event))]
-    (api/msg-room! (:channel event) choice)))
 
 (def letter-frequencies
   {"a" 11.602
@@ -76,26 +70,42 @@
 
 (defn acronym-handler
   "Respond to an acronym command with a random acronym"
-  [event]
-  (when-let [num-letters (Integer/parseInt (first (:args event)))]
-    (let [letters (repeatedly num-letters #(choose-weighted letter-frequencies))
-          acronym (str/join letters)]
-      (api/msg-room! (:channel event) acronym))))
+  [channel num-letters]
+  (let [letters (repeatedly num-letters #(choose-weighted letter-frequencies))
+        acronym (str/join letters)]
+      (api/msg-room! channel acronym)))
+
+(defn choose-handler
+  [channel choices]
+  (let [choice (rand-nth choices)]
+    (api/msg-room! channel choice)))
+
+(def acronym-cmd-def
+  {:name "acronym"
+   :desc "Gives you a number of letters to backronym"
+   :cmds [{:cmd ""
+           :desc "Generate a set of random weighted letters"
+           :handler acronym-handler
+           :args [{:name :number :converter #(Integer/parseInt %)}]}]})
+
+(def choose-cmd-def
+  {:name "choose"
+   :desc "Random choice from given strings"
+   :cmds [{:cmd ""
+           :desc "Given comma-separated line, pick a random response"
+           :handler choose-handler
+           :args [{:name :choices :converter #(str/split % #"[,;]")}]}]})
 
 (defn start-random-state!
   []
-  (util/add-hook! command-state
-                  :acronym
-                  {:handler acronym-handler})
-  (util/add-hook! command-state
-                  :choose
-                  {:handler choose-handler})
+  (register-cmd! acronym-cmd-def)
+  (register-cmd! choose-cmd-def)
   random-atom)
 
 (defn stop-random-state!
   []
-  (util/rm-hook! command-state :acronym acronym-handler)
-  (util/rm-hook! command-state :choose choose-handler)
+  (unregister-cmd! acronym-cmd-def)
+  (unregister-cmd! choose-cmd-def)
   (reset! random-atom {}))
 
 (defstate random-state

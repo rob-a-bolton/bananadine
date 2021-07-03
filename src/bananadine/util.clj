@@ -31,6 +31,10 @@
   []
   (make-array String 0))
 
+(defn uri
+  [s]
+  (when s (assoc (bean (java.net.URI. s)) :uri s)))
+
 (defn decode-query-params
   [query-params]
   (apply hash-map (flatten (map #(str/split %1 #"=") (str/split query-params #"&")))))
@@ -46,13 +50,34 @@
     msg-tree
     (str/join " " (filter string? (flatten msg-tree)))))
 
+(defn extract-txt-msg
+  [content]
+  (merge {:plain (:body content)}
+         (when (= (:format content) "org.matrix.custom.html")
+           {:html (-> content
+                      :formatted_body
+                      tsoup/parse-string
+                      (nth 2)
+                      ((partial drop 2)))})))
+
+(defn extract-img-msg
+  [content]
+  (let [file-name (:body content)
+        mxc-url (uri (:url content))
+        thumbnail-url (uri (get-in content [:info :thumbnail_url]))]
+    (merge {:name (:body content)
+            :url (uri (:url content))}
+           (when thumbnail-url {:thumbnail-url thumbnail-url}))))
+
 (defn extract-msg
   [event]
-  (let [m (get-in event [:content :body])
-        mfmt (get-in event [:content :formatted_body])]
-    (merge {:plain m}
-           (when mfmt
-             {:html (drop 2 (nth (tsoup/parse-string mfmt) 2))}))))
+  (let [content (:content event)
+        msgtype (keyword (:msgtype content))]
+    (merge {:msgtype msgtype}
+           (case msgtype
+             :m.text (extract-txt-msg content)
+             :m.image (extract-img-msg content)
+             :else nil))))
 
 (defn full-user->local-user
   [user-id]

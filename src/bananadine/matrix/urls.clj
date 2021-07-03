@@ -96,13 +96,13 @@
 (defn start-url-state!
   []
   (util/add-hook! event-state
-                  :room-msg
+                  :m.text
                   {:handler extract-urls})
   url-atom)
 
 (defn stop-url-state!
   []
-  (util/rm-hook! event-state :room-msg extract-urls)
+  (util/rm-hook! event-state :m.text extract-urls)
   (reset! url-atom {}))
 
 (defstate url-state
