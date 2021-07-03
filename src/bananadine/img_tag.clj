@@ -40,9 +40,9 @@
   (api/msg-room! channel (list  "Image " [:strong img-name] " does not exist")))
 
 (defn get-last-img-info
-  []
+  [channel]
   (-> (q/with-collection (:dbd dbcon) event-collection
-        (q/find {:content.msgtype "m.image"})
+        (q/find {:content.msgtype "m.image" :channel channel})
         (q/fields [:content :origin_server_ts])
         (q/sort (array-map :origin_server_ts -1))
         (q/limit 1))
@@ -71,8 +71,8 @@
                          {$set {:name new-name}}))))
 
 (defn name-last-img
-  [img-name]
-  (let [img (get-last-img-info)]
+  [channel img-name]
+  (let [img (get-last-img-info channel)]
     (mc/insert (:dbd dbcon) img-tag-collection
                {:name img-name
                 :uri (get-in img [:url :uri])
@@ -114,7 +114,7 @@
 
 (defn handle-name-img
   [channel img-name]
-  (name-last-img img-name)
+  (name-last-img channel img-name)
   (api/msg-room! channel (list "Named last image " [:strong img-name])))
 
 (defn handle-rm-img
@@ -188,7 +188,8 @@
         tagged (seq (get-tag-imgs img-name))]
     (cond
       img (api/post-img! channel (:uri img) (:img-info img) (:name img))
-      tagged (let [img (rand-nth tagged)] (api/post-img! channel (:uri img) (:img-info img) (:name img))))))
+      tagged (let [img (rand-nth tagged)]
+               (api/post-img! channel (:uri img) (:img-info img) (:name img))))))
 
 (def img-cmd-def
   {:name "img"
