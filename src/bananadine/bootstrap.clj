@@ -19,6 +19,7 @@
             [bananadine.commands :refer [command-state]]
             [bananadine.commands.cotd :refer [cotd-state]]
             [bananadine.commands.random :refer [random-state]]
+            [bananadine.img-tag :refer [img-tag-state]]
             [bananadine.matrix.connection :refer [conn]]
             [bananadine.matrix.events :refer [event-state]]
             [bananadine.matrix.rooms :refer [room-state]]
@@ -39,6 +40,7 @@
    cotd-state
    event-state
    generic-state
+   img-tag-state
    random-state
    reddit-state
    regex-trigger-state

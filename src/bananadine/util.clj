@@ -64,10 +64,10 @@
   [content]
   (let [file-name (:body content)
         mxc-url (uri (:url content))
-        thumbnail-url (uri (get-in content [:info :thumbnail_url]))]
-    (merge {:name (:body content)
-            :url (uri (:url content))}
-           (when thumbnail-url {:thumbnail-url thumbnail-url}))))
+        img-info (:info content)]
+    {:name (:body content)
+     :url (uri (:url content))
+     :img-info img-info}))
 
 (defn extract-msg
   [event]

@@ -145,20 +145,6 @@
   [channel rx-name]
   (api/msg-room! channel [:p "Regex " [:strong rx-name] " does not exist"]))
 
-(defn print-help
-  [channel]
-  (api/msg-room! channel
-   [:p
-    [:strong "regex create "] [:em "name regex"] ": Create a named regex" [:br]
-    [:strong "regex list"] ": Lists the named regexes" [:br]
-    [:strong "regex set "] [:em "name regex"] ": Change a named regex" [:br]
-    [:strong "regex rm! "] [:em "name"] ": Delete a named regex" [:br]
-    [:strong "regex resp "] [:em "name"] ": Show the responses for a regex" [:br]
-    [:strong "regex resp add "] [:em "name response"] ": Add a response to a regex" [:br]
-    [:strong "regex resp rm "] [:em "name index"] ": Delete a response from a regex" [:br]
-    [:strong "regex chance "] [:em "name"] ": Show the chance of triggering a regex" [:br]
-    [:strong "regex chance "] [:em "name chance"] ": Set the chance of triggering a regex" [:br]]))
-
 (defn handle-create-cmd
   [channel rx-name regex]
   (upsert-regex-trigger rx-name {:regex regex})

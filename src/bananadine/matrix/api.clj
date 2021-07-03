@@ -136,7 +136,7 @@
   [room-id msg & {:keys [notice] :or {notice true}}]
   (µ/log {:room-id room-id :msg msg})
   (let [res (client/put
-             (make-url (str "/_matrix/client/r0/rooms/"
+             (make-url (str "_matrix/client/r0/rooms/"
                             (name room-id)
                             "/send/m.room.message/"
                             (db/get-txn-id)))
@@ -149,3 +149,29 @@
                       :body (plain-msg msg)})})]
     (db/inc-txn-id!)
     (:body res)))
+
+(defn post-img!
+  [room-id mxc img-info caption]
+  (let [res (client/put
+             (make-url (str "_matrix/client/r0/rooms/"
+                            (name room-id)
+                            "/send/m.room.message/"
+                            (db/get-txn-id)))
+             {:as :json
+              :oauth-token (db/get-token)
+              :body (generate-string
+                     {:msgtype "m.image"
+                      :url mxc
+                      :info img-info
+                      :body caption})})]
+    (db/inc-txn-id!)
+    (:body res)))
+
+(defn upload-file
+  [file]
+  (let [safe-filename (.getName file)]
+    (client/post
+     (make-url (format "_matrix/media/r0/upload?filename=%s" safe-filename))
+     {:as :json
+      :oauth-token (db/get-token)
+      :body file})))
