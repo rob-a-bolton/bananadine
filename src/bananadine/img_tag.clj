@@ -195,7 +195,7 @@
   {:name "img"
    :desc "Manage named and tagged images"
    :cmds [{:cmd "name"
-           :desc "Named the last image posted"
+           :desc "Names the last image posted"
            :handler handle-name-img
            :args [{:name :name}]}
           {:cmd "rename"
@@ -207,7 +207,7 @@
            :handler handle-rm-img
            :args [{:name :name}]}
           {:cmd "list"
-           :desc "List the named regexes"
+           :desc "List the named images"
            :handler handle-list-imgs
            :args []}
           {:cmd "info"
@@ -223,7 +223,7 @@
            :handler handle-untag-img
            :args [{:name :name} {:name :tag}]}
           {:cmd "tag list"
-           :desc "Lists tags used"
+           :desc "Lists all image tags"
            :handler handle-list-tags
            :args []}
           {:cmd "tag find"
