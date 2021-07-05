@@ -101,7 +101,7 @@
 
 (defn regex-matches
   [s]
-  (filter (fn [[_ v]] (re-matches (re-pattern (:regex v)) s))
+  (filter (fn [[_ v]] (re-find (re-pattern (:regex v)) s))
           (:regexes @regex-trigger-atom)))
 
 (def rx-resp-groups #"\{([^}]+)\}")
