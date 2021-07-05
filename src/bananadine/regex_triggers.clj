@@ -99,9 +99,21 @@
     (swap! regex-trigger-atom assoc-in [:regexes name] new-obj)
     (db-upsert-regex-trigger name new-obj)))
 
+(defn try-re-find
+  [channel regex s]
+  (try
+    (re-find (re-pattern regex) s)
+    (catch java.util.regex.PatternSyntaxException e
+      (api/msg-room! channel
+                     (list "Error parsing regex "
+                           [:strong regex]
+                           [:br]
+                           [:font {:color "#ff0000"} (.getMessage e)]))
+      nil)))
+
 (defn regex-matches
-  [s]
-  (filter (fn [[_ v]] (re-find (re-pattern (:regex v)) s))
+  [channel s]
+  (filter (fn [[_ v]] (try-re-find channel (:regex v) s))
           (:regexes @regex-trigger-atom)))
 
 (def rx-resp-groups #"\{([^}]+)\}")
@@ -131,7 +143,7 @@
 (defn handle-regex-triggers
   [{:keys [msg channel]}]
   (let [msg (:plain msg)
-        matches (regex-matches msg)
+        matches (regex-matches channel msg)
         responses (->> matches
                        (map (fn [[_ v]] (run-regex (re-pattern (:regex v))
                                                           msg
