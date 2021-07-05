@@ -157,6 +157,7 @@
       (api/msg-room! channel
                      [:p [:h6 "Regexes"] [:br]
                       (->> objs
+                           sort
                            (map (fn [[rx-name obj]] [[:strong rx-name] " " (:regex obj)]))
                            (interpose [[:br]])
                            (apply concat))])
